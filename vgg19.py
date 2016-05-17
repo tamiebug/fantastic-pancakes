@@ -1,5 +1,6 @@
 import tensorflow as tf
 import caffe
+import numpy
 
 VGG_MEAN = [103.939, 116.779, 123.68]
 DEF_CAFFEMODEL_PATH = "models/VGG_ILSVRC_16_layers.caffemodel"
@@ -17,6 +18,24 @@ class Vgg19():
 	def _buildGraph(self, img, train=False):
 		caffeVggLayers = _extractCaffeLayers(self, trainable=True)
 		
+		def createFirstConvLayer(bottom, caffeLayer, name, trainable=True):
+			
+
+			
+			weightValues = layer.blobs[0].data.transpose((2,3,1,0))
+			biasValues = layer.blobs[1].data
+			
+			# Input channels is the 3rd component
+			weightValues = numpy.copy(weightValues[:,:,[2,1,0],:]
+				
+			with tf.variable_scope(name) as scope:
+				weights = tf.Variable(weightValues, trainable=trainable, name="Filter")
+				biases = tf.Variable(biasValues, trainable=trainable, name="Bias")
+				conv = tf.nn.conv2d(bottom, weights, [1,1,1,1], padding="SAME")
+				bias = tf.nn.bias_add(conv, biases)
+				
+			return bias				
+			
 		def createConvLayer(bottom, caffeLayer, name, trainable=True):
 			
 			weightValues = layer.blobs[0].data.transpose((2,3,1,0))
