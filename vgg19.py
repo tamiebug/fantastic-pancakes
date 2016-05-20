@@ -10,18 +10,17 @@ class Vgg19():
 	def _extractCaffeLayers(self, trainable=True):
 
 		# We need to load, instead, from a numpy file.
-		caffeVgg = caffe.Net(s.DEF_PROTOTXT_PATH, s.DEF_CAFFEMODEL_PATH, caffe.TEST)
-		caffeVggLayers = { caffeVGG._layer_names[i]: layer for i, layer in enumerate(caffeVGG.layers) }
-		return caffeVggLayers
+		self.weightsDict = numpy.load(s.DEF_WEIGHTS_PATH)
+		self.biasesDict = numpy.load(s.DEF_BIASES_PATH)
+
 		
 	def _buildGraph(self, img, train=False):
 		caffeVggLayers = _extractCaffeLayers(self, trainable=True)
 		
-		def createFirstConvLayer(bottom, caffeLayer, name, trainable=True):
+		def createFirstConvLayer(bottom, name, trainable=True):
 			
-			
-			weightValues = layer.blobs[0].data.transpose((2,3,1,0))
-			biasValues = layer.blobs[1].data
+			weightValues = self.weightsDict[name]
+			biasValues = self.biasesDict[name]
 			
 			# Input channels is the 3rd component
 			weightValues = numpy.copy(weightValues[:,:,[2,1,0],:]
@@ -34,10 +33,10 @@ class Vgg19():
 				
 			return bias				
 			
-		def createConvLayer(bottom, caffeLayer, name, trainable=True):
+		def createConvLayer(bottom, name, trainable=True):
 			
-			weightValues = layer.blobs[0].data.transpose((2,3,1,0))
-			biasValues = layer.blobs[1].data
+			weightValues = self.weightsDict[name].transpose((2,3,1,0))
+			biasValues = self.biasesDict[name]
 
 			with tf.variable_scope(name) as scope:
 				weights = tf.Variable(weightValues, trainable=trainable, name="Filter")
@@ -47,16 +46,16 @@ class Vgg19():
 				
 			return bias
 
-		def createFirstFcLayer(bottom, caffeLayer, name, trainable=True):
+		def createFirstFcLayer(bottom, name, trainable=True):
 			INPUT_SIZE = 25088
 			OUTPUT_SIZE = 4096
-			weightValues = layer.blobs[0].data
+			weightValues = self.weightsDict[name]
 			assert weightValues.shape == (OUTPUT_SIZE, INPUT_SIZE)
 			weightValues = weightValues.reshape((INPUT_SIZE, 512, 7, 7))
 			weightValues = weightValues.transpose((2, 3, 1, 0))
 			weightValues = weightValues.reshape(OUTPUT_SIZE, INPUT_SIZE)
 
-			biasValues = layer.blobs[1].data
+			biasValues = self.biasesDict[name]
 			
 			with tf.variable_scope(name) as scope:
 				weights = tf.Variable(weightValues, trainable=trainable, name="Weights")
@@ -67,12 +66,12 @@ class Vgg19():
 			
 			return layer
 
-		def createFcLayer(bottom, caffeLayer, name, trainable=True):
+		def createFcLayer(bottom, name, trainable=True):
 			INPUT_SIZE = 4096
-			weightValues = layer.blobs[0].data
+			weightValues = self.weightsDict[name]
 			# Swapping in_channel and out_channel for tf
 			weightValues = weightValues.transpose((1,0))
-			biasValues = layer.blobs[1].data
+			biasValues = self.biasesDict[name]
 			
 			with tf.variable_scope(name) as scope:
 				weights = tf.Variable(weightValues, trainable=trainable, name="Weights")
@@ -91,8 +90,7 @@ class Vgg19():
 		prevLayer = img
 		for layername in layerNames:
 			if layername.startswith('conv'):
-				caffeLayer = caffeVggLayers[layername]
-				self.layers[layername] = createConvLayer(prevLayer, caffeLayer, layername, train)
+				self.layers[layername] = createConvLayer(prevLayer, layername, train)
 			elif layername.startswith('pool'):
 				self.layers[layername] = tf.nn.max_pool(prevLayer, ksize=[1,2,2,1], 
 					strides=[1,2,2,1], padding='SAME', name=layername)
