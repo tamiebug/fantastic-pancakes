@@ -61,5 +61,8 @@ target/
 #Ipython Notebook
 .ipynb_checkpoints
 
-#Downlaoded Models
+# Downlaoded Models
 model/
+
+# Virtualenv
+tens/

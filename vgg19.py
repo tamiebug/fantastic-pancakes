@@ -1,17 +1,16 @@
 import tensorflow as tf
 import caffe
 import numpy
-
-VGG_MEAN = [103.939, 116.779, 123.68]
-DEF_CAFFEMODEL_PATH = "models/VGG_ILSVRC_16_layers.caffemodel"
-DEF_PROTOTXT_PATH = "models/VGG_2014_16.prototxt"
+import settings as s
 
 class Vgg19():
 	def __init__(self):
 		return
 
 	def _extractCaffeLayers(self, trainable=True):
-		caffeVgg = caffe.Net(DEF_PROTOTXT_PATH, DEF_CAFFEMODEL_PATH, caffe.TEST)
+
+		# We need to load, instead, from a numpy file.
+		caffeVgg = caffe.Net(s.DEF_PROTOTXT_PATH, s.DEF_CAFFEMODEL_PATH, caffe.TEST)
 		caffeVggLayers = { caffeVGG._layer_names[i]: layer for i, layer in enumerate(caffeVGG.layers) }
 		return caffeVggLayers
 		
@@ -20,7 +19,6 @@ class Vgg19():
 		
 		def createFirstConvLayer(bottom, caffeLayer, name, trainable=True):
 			
-
 			
 			weightValues = layer.blobs[0].data.transpose((2,3,1,0))
 			biasValues = layer.blobs[1].data
