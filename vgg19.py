@@ -7,22 +7,28 @@ class Vgg19():
 	def __init__(self):
 		return
 
-	def _extractCaffeLayers(self, trainable=True):
+	def _extractCaffeLayers(self, trainable=True, weightsPath=s.DEF_WEIGHTS_PATH,
+							biasesPath=s.DEF_BIASES_PATH):
+		# Takes as an input whether we want our graph to be trainable or not,
+		# and using this information loads the parameters from a .npz file
+	
+		self.weightsDict = numpy.load(s.weightsPath)
+		self.biasesDict = numpy.load(s.biasesPath)
 
-		# We need to load, instead, from a numpy file.
-		self.weightsDict = numpy.load(s.DEF_WEIGHTS_PATH)
-		self.biasesDict = numpy.load(s.DEF_BIASES_PATH)
-
-		
 	def _buildGraph(self, img, train=False):
+		# Takes as input a Tensorflow placeholder or layer and whether
+		# the graph is being trained or whether it is trained.
 		caffeVggLayers = _extractCaffeLayers(self, trainable=True)
 		
 		def createFirstConvLayer(bottom, name, trainable=True):
-			
+			# Creats a convolutional Tensorflow layer with its weights
+			# permuted so that it takes RGB instead of BGR images as input
+			# Returns the bias layer so it can be plugged into other layers
+		
 			weightValues = self.weightsDict[name]
 			biasValues = self.biasesDict[name]
 			
-			# Input channels is the 3rd component
+			# Color channels are the third component
 			weightValues = numpy.copy(weightValues[:,:,[2,1,0],:]
 				
 			with tf.variable_scope(name) as scope:
@@ -30,11 +36,14 @@ class Vgg19():
 				biases = tf.Variable(biasValues, trainable=trainable, name="Bias")
 				conv = tf.nn.conv2d(bottom, weights, [1,1,1,1], padding="SAME")
 				bias = tf.nn.bias_add(conv, biases)
-				
 			return bias				
 			
 		def createConvLayer(bottom, name, trainable=True):
-			
+			# Creates a convolutional Tensorflow layer given the name
+			# of the layer.  This name is looked up in the weighsDict and
+			# biasesDict in order to obtain the parameters to construct the
+			# layer
+
 			weightValues = self.weightsDict[name].transpose((2,3,1,0))
 			biasValues = self.biasesDict[name]
 
@@ -47,11 +56,21 @@ class Vgg19():
 			return bias
 
 		def createFirstFcLayer(bottom, name, trainable=True):
+			# Creates the first fully connected layer which converts the
+			# output of the last convolutional layer to the input for the next
+			# fully connected ones.  Returns the bias layer.
+			
 			INPUT_SIZE = 25088
 			OUTPUT_SIZE = 4096
+			
 			weightValues = self.weightsDict[name]
 			assert weightValues.shape == (OUTPUT_SIZE, INPUT_SIZE)
+
+			# Reshape the weights to their unsquashed form 
 			weightValues = weightValues.reshape((INPUT_SIZE, 512, 7, 7))
+
+			# Transpose the weights so that it takes as input tensors in the
+			# tensorflow order instead of the caffe order
 			weightValues = weightValues.transpose((2, 3, 1, 0))
 			weightValues = weightValues.reshape(OUTPUT_SIZE, INPUT_SIZE)
 
@@ -67,8 +86,14 @@ class Vgg19():
 			return layer
 
 		def createFcLayer(bottom, name, trainable=True):
+			# Creates a fully connected layer with INPUT_SIZE inputs and
+			# INPUT_SIZE outputs.  Loads the weights from the weightsDict and
+			# biasesDict dictionaries using they key value name and returns the
+			# bias layer.
+
 			INPUT_SIZE = 4096
 			weightValues = self.weightsDict[name]
+
 			# Swapping in_channel and out_channel for tf
 			weightValues = weightValues.transpose((1,0))
 			biasValues = self.biasesDict[name]
@@ -87,6 +112,8 @@ class Vgg19():
 						'conv3_1', 'relu3_1', 'conv3_2', 'relu3_2', 'conv3_3', 'relu3_3', 'conv3_4', 'relu3_4', 'pool3',
 						'conv4_1', 'relu4_1', 'conv4_2', 'relu4_2', 'conv4_3', 'relu4_3', 'conv4_4', 'relu4_4', 'pool3',
 						'conv5_1', 'relu5_1', 'conv5_2', 'relu5_2', 'conv5_3', 'relu5_3', 'conv5_4', 'relu5_4', 'pool3' ]
+
+		# We start out with the input img
 		prevLayer = img
 		for layername in layerNames:
 			if layername.startswith('conv'):
@@ -99,8 +126,11 @@ class Vgg19():
 			else:
 				print("Error in layerNames in vgg19.py.  %s was not a conv, relu, nor pool"%layername)		
 			prevLayer = self.layers[layername]
+			
 		self.layers['fc6'] = createFirstFcLayer(prevLayer, 'fc6', 'fc6', trainable=train)
 		self.layers['relu6'] = tf.nn.relu(self.layers['fc6'], 'relu6')
+			
+		# If we are training the model, we need to activate dropout.
 		if train:
 			self.layers['drop6'] = tf.nn.dropout(self.layers['relu6'], name='drop6')
 			prevLayer = self.layers['drop6']
@@ -109,6 +139,8 @@ class Vgg19():
 			 
 		self.layers['fc7'] = createFcLayer(prevLayer, 'fc7', 'fc7', trainable=train)
 		self.layers['relu7'] = tf.nn.relu(self.layers['fc6'], 'relu7')
+
+		# If we are training the model, we need to activate dropout.
 		if train:
 			self.layers['drop7'] = tf.nn.dropout(self.layers['relu7'], name='drop7')
 			prevLayer = self.layers['drop7']
