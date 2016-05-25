@@ -15,7 +15,7 @@ class Vgg19():
 		self.weightsDict = numpy.load(s.weightsPath)
 		self.biasesDict = numpy.load(s.biasesPath)
 
-	def _buildGraph(self, img, train=False):
+	def buildGraph(self, img, train=False):
 		# Takes as input a Tensorflow placeholder or layer and whether
 		# the graph is being trained or whether it is trained.
 		caffeVggLayers = _extractCaffeLayers(self, trainable=True)

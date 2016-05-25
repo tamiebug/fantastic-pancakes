@@ -3,6 +3,7 @@ DEF_CAFFEMODEL_PATH = "models/VGG_ILSVRC_19_layers.caffemodel"
 DEF_PROTOTXT_PATH = "models/VGG_2014_19.prototxt"
 DEF_WEIGHTS_PATH = "models/VGG_2014_19_weights.pyz"
 DEF_BIASES_PATH = "models/VGG_2014_19_biases.pyz"
+DEF_CATNAMES_PATH = "models/synset.txt"
 
 DEF_CAFFEMODEL_DL =
 "http://www.robots.ox.ac.uk/~vgg/software/very_deep/caffe/VGG_ILSVRC_19_layers.caffemodel"
