@@ -28,9 +28,14 @@ class Vgg19():
 			weightValues = self.weightsDict[name]
 			biasValues = self.biasesDict[name]
 			
-			# Color channels are the third component
-			weightValues = numpy.copy(weightValues[:,:,[2,1,0],:]
-				
+			# Tensorflow order	: [height, width, in_channels, out_channels]
+			# Caffe order		: [out_channels, in_channels, height, width]
+			# Hence, to translate from Caffe to Tensorflow
+			weightValues = weightValues.transpose((2,3,1,0))
+			
+			# Converting BGR to RGB
+			weightValues = numpy.copy(weightValues[:,:,[2,1,0],:])
+
 			with tf.variable_scope(name) as scope:
 				weights = tf.Variable(weightValues, trainable=trainable, name="Filter")
 				biases = tf.Variable(biasValues, trainable=trainable, name="Bias")
@@ -44,7 +49,11 @@ class Vgg19():
 			# biasesDict in order to obtain the parameters to construct the
 			# layer
 
+			# Tensorflow order	: [height, width, in_channels, out_channels]
+			# Caffe order		: [out_channels, in_channels, height, width]
+			# Hence, to translate from Caffe to Tensorflow
 			weightValues = self.weightsDict[name].transpose((2,3,1,0))
+			
 			biasValues = self.biasesDict[name]
 
 			with tf.variable_scope(name) as scope:
