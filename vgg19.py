@@ -130,7 +130,7 @@ class Vgg19():
 			elif layername.startswith('pool'):
 				self.layers[layername] = tf.nn.max_pool(prevLayer, ksize=[1,2,2,1], 
 					strides=[1,2,2,1], padding='SAME', name=layername)
-			elif: layername.startswith('relu'):
+			elif layername.startswith('relu'):
 				self.layers[layername] = tf.nn.relu(prevLayer, layername)
 			else:
 				print("Error in layerNames in vgg19.py.  %s was not a conv, relu, nor pool"%layername)		
