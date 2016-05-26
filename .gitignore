@@ -62,7 +62,7 @@ target/
 .ipynb_checkpoints
 
 # Downlaoded Models
-model/
+models/
 
 # Virtualenv
 tens/
