@@ -1,5 +1,4 @@
 import tensorflow as tf
-import caffe
 import numpy
 import settings as s
 
@@ -12,13 +11,13 @@ class Vgg19():
 		# Takes as an input whether we want our graph to be trainable or not,
 		# and using this information loads the parameters from a .npz file
 	
-		self.weightsDict = numpy.load(s.weightsPath)
-		self.biasesDict = numpy.load(s.biasesPath)
+		self.weightsDict = numpy.load(s.DEF_WEIGHTS_PATH)
+		self.biasesDict = numpy.load(s.DEF_BIASES_PATH)
 
 	def buildGraph(self, img, train=False):
 		# Takes as input a Tensorflow placeholder or layer and whether
 		# the graph is being trained or whether it is trained.
-		caffeVggLayers = _extractCaffeLayers(self, trainable=True)
+		self._extractCaffeLayers(self, True)
 		
 		def createFirstConvLayer(bottom, name, trainable=True):
 			# Creats a convolutional Tensorflow layer with its weights
@@ -76,13 +75,13 @@ class Vgg19():
 			assert weightValues.shape == (OUTPUT_SIZE, INPUT_SIZE)
 
 			# Reshape the weights to their unsquashed form 
-			weightValues = weightValues.reshape((INPUT_SIZE, 512, 7, 7))
+			weightValues = weightValues.reshape((OUTPUT_SIZE, 512, 7, 7))
 
 			# Transpose the weights so that it takes as input tensors in the
 			# tensorflow order instead of the caffe order
 			weightValues = weightValues.transpose((2, 3, 1, 0))
-			weightValues = weightValues.reshape(OUTPUT_SIZE, INPUT_SIZE)
-
+			weightValues = weightValues.reshape(INPUT_SIZE, OUTPUT_SIZE)
+			
 			biasValues = self.biasesDict[name]
 			
 			with tf.variable_scope(name) as scope:
@@ -116,7 +115,7 @@ class Vgg19():
 
 		# All layer types have been defined, it is now time to actually make the model
 		self.layers = {}
-		layerNames = [	'conv1_1', 'reul1_1', 'conv1_2', 'relu2_2', 'pool1',
+		layerNames = [	'conv1_1', 'relu1_1', 'conv1_2', 'relu2_2', 'pool1',
 						'conv2_1', 'relu2_1', 'conv2_2', 'relu2_2', 'pool2', 
 						'conv3_1', 'relu3_1', 'conv3_2', 'relu3_2', 'conv3_3', 'relu3_3', 'conv3_4', 'relu3_4', 'pool3',
 						'conv4_1', 'relu4_1', 'conv4_2', 'relu4_2', 'conv4_3', 'relu4_3', 'conv4_4', 'relu4_4', 'pool3',
@@ -136,7 +135,7 @@ class Vgg19():
 				print("Error in layerNames in vgg19.py.  %s was not a conv, relu, nor pool"%layername)		
 			prevLayer = self.layers[layername]
 			
-		self.layers['fc6'] = createFirstFcLayer(prevLayer, 'fc6', 'fc6', trainable=train)
+		self.layers['fc6'] = createFirstFcLayer(prevLayer, 'fc6', trainable=train)
 		self.layers['relu6'] = tf.nn.relu(self.layers['fc6'], 'relu6')
 			
 		# If we are training the model, we need to activate dropout.
@@ -146,7 +145,7 @@ class Vgg19():
 		else:
 			prevLayer = self.layers['relu6']
 			 
-		self.layers['fc7'] = createFcLayer(prevLayer, 'fc7', 'fc7', trainable=train)
+		self.layers['fc7'] = createFcLayer(prevLayer, 'fc7', trainable=train)
 		self.layers['relu7'] = tf.nn.relu(self.layers['fc6'], 'relu7')
 
 		# If we are training the model, we need to activate dropout.
@@ -156,7 +155,7 @@ class Vgg19():
 		else:
 			prevLayer = self.layers['relu7']
 		
-		self.layers['fc8'] = createFcLayer(prevLayer, 'fc7', 'fc7', trainable=train)
+		self.layers['fc8'] = createFcLayer(prevLayer, 'fc7', trainable=train)
 		self.prob = tf.nn.softmax(self.layers['fc8'], name='prob')
 		
 	def getOutput(self):

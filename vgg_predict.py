@@ -1,6 +1,7 @@
-#import vgg19
+import vgg19
 import settings as s
 import utils
+
 
 print "Downloading model....",
 utils.downloadModel()

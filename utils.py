@@ -1,9 +1,9 @@
-import caffe
 import numpy
 import settings as s
 from urllib import urlretrieve
 
 def coffeeMachine():
+	import caffe
 	coffee = caffe.Net(s.DEF_PROTOTXT_PATH, s.DEF_CAFFEMODEL_PATH, caffe.TEST)
 	"""
 	print("Length of layernames = %i, Length of coffeelayers = %i"%(len(coffee._layer_names), len(coffee.layers)))
