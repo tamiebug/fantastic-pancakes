@@ -1,5 +1,5 @@
-import tensorflow as tf
 import numpy
+import tensorflow as tf
 import settings as s
 
 class Vgg19():
@@ -156,7 +156,7 @@ class Vgg19():
 			prevLayer = self.layers['relu7']
 		
 		self.layers['fc8'] = createFcLayer(prevLayer, 'fc7', trainable=train)
-		self.prob = tf.nn.softmax(self.layers['fc8'], name='prob')
+		self.layers['prob'] = tf.nn.softmax(self.layers['fc8'], name='prob')
 		
 	def getOutput(self):
 		return layers['prob']
