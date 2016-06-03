@@ -4,12 +4,10 @@ import tensorflow
 import settings as s
 from urllib import urlretrieve
 import skimage.io
-import skimage.transform:
+import skimage.transform
 
 def loadImage(imgPath):
- 	print imgPath
 	img = skimage.io.imread(imgPath)
-	img = img / 255.0	
 	# We now need to crop the center square from our image
 	shortSide = min(img.shape[0:2])
 	x_1 = (img.shape[0] - shortSide) / 2
@@ -17,9 +15,16 @@ def loadImage(imgPath):
 	y_1 = (img.shape[1] - shortSide) / 2
 	y_2 = (img.shape[1] + shortSide) / 2
 	centerSquare = img[x_1:x_2, y_1:y_2]
-	return skimage.transform.resize(centerSquare, (224,224))
 	
-
+	rescaledImg = skimage.transform.resize(centerSquare, (224,224))
+	
+	# Subtract VGG_MEAN from every pixel.  VGG_MEAN is in BGR, but image is
+	# RGB, hence the reverse order.
+	rescaledImg[:,:,0] -= s.VGG_MEAN[2]
+	rescaledImg[:,:,1] -= s.VGG_MEAN[1]
+	rescaledImg[:,:,2] -= s.VGG_MEAN[0]
+	return rescaledImg
+	
 def downloadModel():
 	# prototxt for the vgg19 model
 	def progressBar(blockCount, blockSize, fileSize):
