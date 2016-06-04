@@ -42,11 +42,41 @@ class vgg19Tests(unittest.TestCase):
 		tf.reset_default_graph()
 		self.sess.close()
 		
+	def blob_tensor_equality_assert(self, name, tolerance=.01, testingChannels=[0]):
+		# Pass an empty list to testingChannels to test all of them
+		if testingChannels == []:
+			blob_data = self.coffee.blobs[name]
+			tensor_data = self.output[self.testLayers.index(name)]
+		else:
+			blob_data = self.coffee.blobs[name][testingChannels]
+			tensor_data = self.output[self.testLayers.index(name)][testingChannels]
+		greatest_diff = np.absolute(blob_data - tensor_data)
+		assertLessEqual(greatest_diff, tolerance, "Greatest difference was %f"%greatest_diff)
+		
 	def test_relu1_1(self):
-		print self.output.shape
-		#np.testing.assert_array_almost_equal(
-		#	self.output[0][0], 
-		#)
-
+		self.blob_tensor_equality_assert(self, 'relu1_1', .001, [])
+		
+	def test_relu2_1(self):
+		self.blob_tensor_equality_assert(self, 'relu2_1', .001, [0])
+		
+	def test_relu3_4(self):
+		self.blob_tensor_equality_assert(self, 'relu3_4', .001, [0])
+		
+	def test_relu4_4(self):
+		self.blob_tensor_equality_assert(self, 'relu4_4', .001, [0])
+	
+	def test_pool5(self):
+		self.blob_tensor_equality_assert(self, 'pool5', .001, [0])
+		
+	def test_relu6(self):
+		self.blob_tensor_equality_assert(self, 'relu6', .001, [0])
+		
+	def test_relu7(self):
+		self.blob_tensor_equality_assert(self, 'relu7', .001, [0])
+		
+	def test_prob(self):
+		self.blob_tensor_equality_assert(self, 'prob', .001, [0])
+		
+		
 if __name__ == '__main__':
 	unittest.main()
