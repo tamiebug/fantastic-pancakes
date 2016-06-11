@@ -2,19 +2,19 @@ import numpy as np
 import caffe
 import tensorflow as tf
 
-import unittest
 import utils
 import vgg19
 import settings as s
 
 import threading
-
+import unittest
 
 class ModelOutputGenerator():
 	__metaclass__ = utils.Singleton
 	def __init__(self):
 		# Layer activations that we are going to test
 		self.testLayers = ['relu1_1', 'relu2_1', 'relu3_4', 'relu4_4', 'pool5', 'relu6', 'relu7', 'prob']
+		self.caffeTestLayers = ['conv1_1', 'conv2_1', 'conv3_4', 'conv4_4', 'pool5', 'fc6'  , 'fc7'  , 'prob']
 		self.output = None
 		# Images we are testing with
 		images = utils.loadImage(s.DEF_TEST_IMAGE_PATHS[0])	
@@ -44,7 +44,6 @@ class ModelOutputGenerator():
 		t = threading.Thread(target=runTensorflow, kwargs={'mog':self,'images':images})
 		t.start()
 		t.join()	
-		# Your thread is dead.  Release the resources, pretty please...
 		
 		# Set up Caffe Model for comparison
 		self.coffee = caffe.Net(s.DEF_PROTOTXT_PATH, s.DEF_CAFFEMODEL_PATH, caffe.TEST)
@@ -55,14 +54,18 @@ class ModelOutputGenerator():
 		transformed_image = transformer.preprocess('data', images)
 		self.coffee.blobs['data'].data[...] = transformed_image
 		self.coffee.forward()
-
+		
+		print("123abc")
+		for key in self.coffee.blobs:
+			print key
 		
 	def returnBlob(self, layername, flavor):
 		"""
 		Returns a layer of name layername in either the tf or caffe model.
 		"""
 		if flavor=="caffe":
-			return self.coffee.blobs[layername].data
+			caffeLayer = self.caffeTestLayers[self.testLayers.index(layername)]
+			return self.coffee.blobs[caffeLayer].data
 		elif flavor=="tensorflow":
 			return self.output[self.testLayers.index(layername)]
 		else:
@@ -75,15 +78,23 @@ class vgg19Tests(unittest.TestCase):
 		
 	def blob_tensor_equality_assert(self, name, tolerance=.01, testingChannels=[0]):
 		# Pass an empty list to testingChannels to test all of them
+		transposeDict =  { 	"relu1_1":(0,2,3,1), 	"relu2_1":(0,2,3,1),
+							"relu3_4":(0,2,3,1),	"relu4_4":(0,2,3,1),
+							"relu4_4":(0,2,3,1),	"pool5"	 :(0,2,3,1),
+							"relu6"  :(0,1)	   ,    "relu7"  :(0,1),
+							"prob"   :(0,1) }
+		
 		if testingChannels == []:
-			blob_data = self.model.returnBlob(name, "caffe").transpose
+			blob_data = self.model.returnBlob(name, "caffe").transpose(transposeDict[name])
 			tensor_data = self.model.returnBlob(name, "tensorflow")
 		else:
-			blob_data = self.model.returnBlob(name, "caffe")[testingChannels]
+			blob_data = self.model.returnBlob(name, "caffe")[testingChannels].transpose(transposeDict[name])
 			tensor_data = self.model.returnBlob(name, "tensorflow")[testingChannels]
-		greatest_diff = np.absolute(blob_data - tensor_data)
-		unittest.assertLessEqual(greatest_diff, tolerance, "Greatest difference was %f"%greatest_diff)
+
 		
+		greatest_diff = np.amax(np.absolute(blob_data - tensor_data))
+		self.assertLessEqual(greatest_diff, tolerance, msg="Greatest difference was %f"%greatest_diff)
+
 	def test_relu1_1(self):
 		self.blob_tensor_equality_assert('relu1_1', .001, [])
 		

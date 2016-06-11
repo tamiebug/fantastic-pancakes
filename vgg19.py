@@ -155,7 +155,7 @@ class Vgg19():
 		else:
 			prevLayer = self.layers['relu7']
 		
-		self.layers['fc8'] = createFcLayer(prevLayer, 'fc7', trainable=train)
+		self.layers['fc8'] = createFcLayer(prevLayer, 'fc8', trainable=train)
 		self.layers['prob'] = tf.nn.softmax(self.layers['fc8'], name='prob')
 		
 	def getOutput(self):
