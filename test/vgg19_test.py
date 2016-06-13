@@ -48,16 +48,17 @@ class ModelOutputGenerator():
 		# Set up Caffe Model for comparison
 		self.coffee = caffe.Net(s.DEF_PROTOTXT_PATH, s.DEF_CAFFEMODEL_PATH, caffe.TEST)
 		transformer = caffe.io.Transformer({'data' : self.coffee.blobs['data'].data.shape})
+		"""
 		transformer.set_transpose('data', (2,0,1)) 	# Move color channels to left-most dimension
 		transformer.set_channel_swap('data', (2,1,0))	# Swap color channels from RGB to BGR
 	
 		transformed_image = transformer.preprocess('data', images)
 		self.coffee.blobs['data'].data[...] = transformed_image
+		"""
+		images2 = np.transpose(images, [2,0,1])
+		transformed_image = np.copy(images2[[2,1,0],:,:])
+		self.coffee.blobs['data'].data[...] = transformed_image
 		self.coffee.forward()
-		
-		print("123abc")
-		for key in self.coffee.blobs:
-			print key
 		
 	def returnBlob(self, layername, flavor):
 		"""
@@ -78,6 +79,9 @@ class vgg19Tests(unittest.TestCase):
 		
 	def blob_tensor_equality_assert(self, name, tolerance=.01, testingChannels=[0]):
 		# Pass an empty list to testingChannels to test all of them
+
+		# Caffe activations are in [channel, h, w] order, whereas TF activations are in [h, w, channel] order
+		# Hence, we must transpose the activations by (0,2,3,1)
 		transposeDict =  { 	"relu1_1":(0,2,3,1), 	"relu2_1":(0,2,3,1),
 							"relu3_4":(0,2,3,1),	"relu4_4":(0,2,3,1),
 							"relu4_4":(0,2,3,1),	"pool5"	 :(0,2,3,1),
@@ -96,28 +100,28 @@ class vgg19Tests(unittest.TestCase):
 		self.assertLessEqual(greatest_diff, tolerance, msg="Greatest difference was %f"%greatest_diff)
 
 	def test_relu1_1(self):
-		self.blob_tensor_equality_assert('relu1_1', .001, [])
+		self.blob_tensor_equality_assert('relu1_1', .01, [])
 		
 	def test_relu2_1(self):
-		self.blob_tensor_equality_assert('relu2_1', .001, [0])
+		self.blob_tensor_equality_assert('relu2_1', .01, [0])
 		
 	def test_relu3_4(self):
-		self.blob_tensor_equality_assert('relu3_4', .001, [0])
+		self.blob_tensor_equality_assert('relu3_4', .01, [0])
 		
 	def test_relu4_4(self):
-		self.blob_tensor_equality_assert('relu4_4', .001, [0])
+		self.blob_tensor_equality_assert('relu4_4', .01, [0])
 	
 	def test_pool5(self):
-		self.blob_tensor_equality_assert('pool5', .001, [0])
+		self.blob_tensor_equality_assert('pool5', .01, [0])
 		
 	def test_relu6(self):
-		self.blob_tensor_equality_assert('relu6', .001, [0])
+		self.blob_tensor_equality_assert('relu6', .01, [0])
 		
 	def test_relu7(self):
-		self.blob_tensor_equality_assert('relu7', .001, [0])
+		self.blob_tensor_equality_assert('relu7', .01, [0])
 		
 	def test_prob(self):
-		self.blob_tensor_equality_assert('prob', .001, [0])
+		self.blob_tensor_equality_assert('prob', .01, [0])
 		
 		
 if __name__ == '__main__':
