@@ -7,6 +7,7 @@ import skimage.io
 import skimage.transform
 
 class Singleton(type):
+	""" Simple Singleton for use as metaclass """
 	_instances = {}
 	def __call__(cls, *args, **kwargs):
 		if cls not in cls._instances:
@@ -15,6 +16,10 @@ class Singleton(type):
 		
 
 def loadImage(imgPath):
+	""" 
+	Loads an image from imgPath, crops the center square, and subtracts the RGB
+	values from VGG_MEAN
+	"""
 	img = skimage.io.imread(imgPath)
 	# We now need to crop the center square from our image
 	shortSide = min(img.shape[0:2])
@@ -34,6 +39,10 @@ def loadImage(imgPath):
 	return rescaledImg
 	
 def downloadModel():
+	"""
+	Download the vgg19 model (.caffemodel and .prototxt) files and save them to the
+	DEF_CAFFEMODEL_PATH and DEF_PROTOTXT_PATH directories
+	"""
 	# prototxt for the vgg19 model
 	def progressBar(blockCount, blockSize, fileSize):
 		# Progress bar for download, passed to urlretrieve
@@ -43,8 +52,12 @@ def downloadModel():
 	urlretrieve(s.DEF_PROTOTXT_DL, s.DEF_PROTOTXT_PATH, progressBar)
 	return
 
-def coffeeMachine():
-	coffee = caffe.Net(s.DEF_PROTOTXT_PATH, s.DEF_CAFFEMODEL_PATH, caffe.TEST)
+def coffeeMachine(prototxtPath=s.DEF_PROTOTXT_PATH, caffemodelPath=s.DEF_CAFFEMODEL_PATH):
+	"""
+	Extract the weights and biases from the .caffemodel and save it in npz files named
+	DEF_WEIGHTS_PATH and DEF_BIASES_PATH
+	"""	
+	coffee = caffe.Net(prototxtPath, caffemodelPath, caffe.TEST)
 	caffeVggWeights = { name: blobs[0].data for name, blobs in coffee.params.iteritems() }
 	caffeVggBiases = { name: blobs[1].data for name, blobs in coffee.params.iteritems() }
 	numpy.savez(s.DEF_WEIGHTS_PATH, **caffeVggWeights)
