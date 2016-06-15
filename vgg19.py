@@ -6,18 +6,16 @@ class Vgg19():
 	def __init__(self):
 		return
 
-	def _extractCaffeLayers(self, trainable=True, weightsPath=s.DEF_WEIGHTS_PATH,
+	def _extractCaffeLayers(self, weightsPath=s.DEF_WEIGHTS_PATH,
 							biasesPath=s.DEF_BIASES_PATH):
-		# Takes as an input whether we want our graph to be trainable or not,
-		# and using this information loads the parameters from a .npz file
-	
-		self.weightsDict = numpy.load(s.DEF_WEIGHTS_PATH)
-		self.biasesDict = numpy.load(s.DEF_BIASES_PATH)
+		# Loads parameters from .npz files, one for the weights and another for the biases
+		self.weightsDict = numpy.load(weightsPath)
+		self.biasesDict = numpy.load(biasesPath)
 
 	def buildGraph(self, img, train=False):
 		# Takes as input a Tensorflow placeholder or layer and whether
 		# the graph is being trained or whether it is trained.
-		self._extractCaffeLayers(self, True)
+		self._extractCaffeLayers()
 		
 		def createFirstConvLayer(bottom, name, trainable=True):
 			# Creats a convolutional Tensorflow layer with its weights
@@ -89,7 +87,6 @@ class Vgg19():
 				
 				flattenedInput = tf.reshape(bottom, [-1, INPUT_SIZE])
 				layer = tf.nn.bias_add(tf.matmul(flattenedInput, weights), biases)
-			
 			return layer
 
 		def createFcLayer(bottom, name, trainable=True):
@@ -161,5 +158,13 @@ class Vgg19():
 		self.layers['fc8'] = createFcLayer(prevLayer, 'fc8', trainable=train)
 		self.layers['prob'] = tf.nn.softmax(self.layers['fc8'], name='prob')
 		
-	def getOutput(self):
-		return layers['prob']
+	def saveModel(self, weightsName, biasesName, overwrite=False):
+		"""
+		Saves the current weights and biases for the model as files named
+		weightsName and biasesName, respectively, in the models/ directory.
+		If a file with this name already exists, will raise error unless
+		overwrite=True, in which case it will overwrite the files.
+		"""
+		numpy.savez(weightsName)
+		numpy.savez(biasesName)
+		
