@@ -3,9 +3,9 @@ import tensorflow as tf
 import settings as s
 
 class Vgg19():
-	def __init__(self):
-		return
-
+	def __init__(self, namespace="vgg19"):
+		self.namespace=namespace
+		
 	def _extractCaffeLayers(self, weightsPath=s.DEF_WEIGHTS_PATH,
 							biasesPath=s.DEF_BIASES_PATH):
 		# Loads parameters from .npz files, one for the weights and another for the biases
@@ -34,7 +34,7 @@ class Vgg19():
 			weightValues2 = numpy.copy(weightValues[:,:,[2,1,0],:])
 			
 			with tf.variable_scope(name) as scope:
-				weights = tf.Variable(weightValues2, trainable=trainable, name="Filter")
+				weights = tf.Variable(weightValues2, trainable=trainable, name="Weights")
 				biases = tf.Variable(biasValues, trainable=trainable, name="Bias")
 				conv = tf.nn.conv2d(bottom, weights, [1,1,1,1], padding="SAME")
 				bias = tf.nn.bias_add(conv, biases)
@@ -54,7 +54,7 @@ class Vgg19():
 			biasValues = self.biasesDict[name]
 
 			with tf.variable_scope(name) as scope:
-				weights = tf.Variable(weightValues, trainable=trainable, name="Filter")
+				weights = tf.Variable(weightValues, trainable=trainable, name="Weights")
 				biases = tf.Variable(biasValues, trainable=trainable, name="Bias")
 				conv = tf.nn.conv2d(bottom, weights, [1,1,1,1], padding="SAME")
 				bias = tf.nn.bias_add(conv, biases)	
@@ -117,47 +117,47 @@ class Vgg19():
 						'conv4_1', 'relu4_1', 'conv4_2', 'relu4_2', 'conv4_3', 'relu4_3', 'conv4_4', 'relu4_4', 'pool4',
 						'conv5_1', 'relu5_1', 'conv5_2', 'relu5_2', 'conv5_3', 'relu5_3', 'conv5_4', 'relu5_4', 'pool5' ]
 
-
-		# The first convolutional layer is special!  We must do it separately.
-		self.layers['conv1_1'] = createFirstConvLayer(img, 'conv1_1', trainable=train)
-		
-		# We start out with the input img
-		prevLayer = self.layers['conv1_1']
-		for layername in layerNames:
-			if layername.startswith('conv'):
-				self.layers[layername] = createConvLayer(prevLayer, layername, train)
-			elif layername.startswith('pool'):
-				self.layers[layername] = tf.nn.max_pool(prevLayer, ksize=[1,2,2,1], 
-					strides=[1,2,2,1], padding='VALID', name=layername)
-			elif layername.startswith('relu'):
-				self.layers[layername] = tf.nn.relu(prevLayer, layername)
+		with tf.variable_scope(self.namespace) as scope:
+			# The first convolutional layer is special!  We must do it separately.
+			self.layers['conv1_1'] = createFirstConvLayer(img, 'conv1_1', trainable=train)
+			
+			# We start out with the input img
+			prevLayer = self.layers['conv1_1']
+			for layername in layerNames:
+				if layername.startswith('conv'):
+					self.layers[layername] = createConvLayer(prevLayer, layername, train)
+				elif layername.startswith('pool'):
+					self.layers[layername] = tf.nn.max_pool(prevLayer, ksize=[1,2,2,1], 
+						strides=[1,2,2,1], padding='VALID', name=layername)
+				elif layername.startswith('relu'):
+					self.layers[layername] = tf.nn.relu(prevLayer, layername)
+				else:
+					print("Error in layerNames in vgg19.py.  %s was not a conv, relu, nor pool"%layername)		
+				prevLayer = self.layers[layername]
+				
+			self.layers['fc6'] = createFirstFcLayer(prevLayer, 'fc6', trainable=train)
+			self.layers['relu6'] = tf.nn.relu(self.layers['fc6'], 'relu6')
+				
+			# If we are training the model, we need to activate dropout.
+			if train:
+				self.layers['drop6'] = tf.nn.dropout(self.layers['relu6'], 0.5, name='drop6')
+				prevLayer = self.layers['drop6']
 			else:
-				print("Error in layerNames in vgg19.py.  %s was not a conv, relu, nor pool"%layername)		
-			prevLayer = self.layers[layername]
-			
-		self.layers['fc6'] = createFirstFcLayer(prevLayer, 'fc6', trainable=train)
-		self.layers['relu6'] = tf.nn.relu(self.layers['fc6'], 'relu6')
-			
-		# If we are training the model, we need to activate dropout.
-		if train:
-			self.layers['drop6'] = tf.nn.dropout(self.layers['relu6'], name='drop6')
-			prevLayer = self.layers['drop6']
-		else:
-			prevLayer = self.layers['relu6']
-			 
-		self.layers['fc7'] = createFcLayer(prevLayer, 'fc7', trainable=train)
-		self.layers['relu7'] = tf.nn.relu(self.layers['fc7'], 'relu7')
+				prevLayer = self.layers['relu6']
+				 
+			self.layers['fc7'] = createFcLayer(prevLayer, 'fc7', trainable=train)
+			self.layers['relu7'] = tf.nn.relu(self.layers['fc7'], 'relu7')
 
-		# If we are training the model, we need to activate dropout.
-		if train:
-			self.layers['drop7'] = tf.nn.dropout(self.layers['relu7'], name='drop7')
-			prevLayer = self.layers['drop7']
-		else:
-			prevLayer = self.layers['relu7']
-		
-		self.layers['fc8'] = createFcLayer(prevLayer, 'fc8', trainable=train)
-		self.layers['prob'] = tf.nn.softmax(self.layers['fc8'], name='prob')
-		
+			# If we are training the model, we need to activate dropout.
+			if train:
+				self.layers['drop7'] = tf.nn.dropout(self.layers['relu7'], 0.5, name='drop7')
+				prevLayer = self.layers['drop7']
+			else:
+				prevLayer = self.layers['relu7']
+			
+			self.layers['fc8'] = createFcLayer(prevLayer, 'fc8', trainable=train)
+			self.layers['prob'] = tf.nn.softmax(self.layers['fc8'], name='prob')
+			
 	def saveModel(self, weightsName, biasesName, overwrite=False):
 		"""
 		Saves the current weights and biases for the model as files named
@@ -165,6 +165,29 @@ class Vgg19():
 		If a file with this name already exists, will raise error unless
 		overwrite=True, in which case it will overwrite the files.
 		"""
-		numpy.savez(weightsName)
-		numpy.savez(biasesName)
+	
+		weightsVar = []
+		biasVar = []
+		for var in tf.all_variables():
+			if var.name.startswith(self.namespace):
+				if "Weights" in var.name:
+					weightsVar.append(var)
+				if "Bias" in var.name:
+					biasVar.append(var)
+		print weightsVar
+		print biasVar
+		fullVarList = biasVar + weightsVar			
+		with tf.Session() as sess:
+			sess.run(tf.initialize_all_variables())
+			output = sess.run(fullVarList)
 		
+		theDict = {var.name:output[i] for i,var in enumerate(fullVarList)}
+		weightsDict = {}
+		biasDict = {}
+		for key, val in theDict.iteritems():
+			if "Weights" in key:
+				weightsDict[key.split(self.namespace)[-1].split('/Weights:0')[0]] = val
+			if "Bias" in key:
+				biasDict[key.split(self.namespace)[-1].split('/Bias:0')[0]] = val
+		numpy.savez("models/"+weightsName, **weightsDict)
+		numpy.savez("models/"+biasesName, **biasDict)		
