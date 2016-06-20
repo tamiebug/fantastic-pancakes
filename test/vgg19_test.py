@@ -7,9 +7,14 @@ import vgg19
 import settings as s
 
 import threading
+import os, sys
 import unittest
 
 class ModelOutputGenerator():
+	"""
+	Singleton class that loads tensorflow and caffe models into memory for testing.
+	Tensorflow is loaded using a separate thread to avoid locking the GPU
+	"""
 	__metaclass__ = utils.Singleton
 	def __init__(self):
 		# Layer activations that we are going to test
@@ -18,7 +23,7 @@ class ModelOutputGenerator():
 		self.output = None
 		# Images we are testing with
 		images = utils.loadImage(s.DEF_TEST_IMAGE_PATHS[0])	
-		
+			
 		# Set up Tensorflow Model
 		def runTensorflow(mog, images):
 			with tf.Session() as sess:
@@ -41,6 +46,11 @@ class ModelOutputGenerator():
 					sess.close()
 			return
 		
+		nulls = [os.open(os.devnull, os.O_RDWR) for _ in [0,1]]
+		old = os.dup(1), os.dup(2)
+		os.dup2(nulls[0], 1)
+		os.dup2(nulls[1], 2)
+		
 		t = threading.Thread(target=runTensorflow, kwargs={'mog':self,'images':images})
 		t.start()
 		t.join()	
@@ -59,7 +69,13 @@ class ModelOutputGenerator():
 		transformed_image = np.copy(images2[[2,1,0],:,:])
 		self.coffee.blobs['data'].data[...] = transformed_image
 		self.coffee.forward()
+
+		os.dup2(old[0],1)
+		os.dup2(old[1],2)
 		
+		os.close(nulls[0])
+		os.close(nulls[1])
+
 	def returnBlob(self, layername, flavor):
 		"""
 		Returns a layer of name layername in either the tf or caffe model.
@@ -72,7 +88,7 @@ class ModelOutputGenerator():
 		else:
 			raise KeyError("Caffe and tensorflow are the only allowed blob flavors")
 		
-class vgg19Tests(unittest.TestCase):				
+class vgg19LayerActivationsTest(unittest.TestCase):				
 	def setUp(self):
 		self.model = ModelOutputGenerator()
 		return
@@ -122,7 +138,6 @@ class vgg19Tests(unittest.TestCase):
 		
 	def test_prob(self):
 		self.blob_tensor_equality_assert('prob', .01, [0])
-		
 		
 if __name__ == '__main__':
 	unittest.main()
