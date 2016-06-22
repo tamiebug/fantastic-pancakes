@@ -2,9 +2,13 @@ import numpy
 import caffe
 import tensorflow
 import settings as s
+
 from urllib import urlretrieve
+import threading
+
 import skimage.io
 import skimage.transform
+
 
 class Singleton(type):
 	""" Simple Singleton for use as metaclass """
@@ -63,3 +67,25 @@ def coffeeMachine(prototxtPath=s.DEF_PROTOTXT_PATH, caffemodelPath=s.DEF_CAFFEMO
 	numpy.savez(s.DEF_WEIGHTS_PATH, **caffeVggWeights)
 	numpy.savez(s.DEF_BIASES_PATH, **caffeVggBiases)
 	print "Coffee successfully brewed"
+
+def isolatedFunctionRun(func, textSuppress, *args, **kwargs):
+	"""
+	Runs the function func, with arguments *args and **kwargs, in its own thread.
+	If textSupress = True, all console output will be redirected to os.devnull
+	"""
+	if textSuppress:
+		# Open two os.devnulls
+		null = [os.open(os.devnull, os.O_RDWR , os.open(os.devnull, os.O_RDWR)]
+		old = os.dup(1), os.dup(2)
+		# Set stderr and stdout to null
+		os.dup2(nulls[0], 1)
+		os.dup2(nulls[1], 2)
+
+	t = threading.Thread(target=func, args=args, kwargs=kwargs)
+	t.start()
+	t.join()
+
+	if textSuppress:
+		# Close the os.devnulls	
+		os.close(nulls[0])
+		os.close(nulls[1])	
