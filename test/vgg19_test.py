@@ -46,35 +46,26 @@ class ModelOutputGenerator():
 					sess.close()
 			return
 		
-		nulls = [os.open(os.devnull, os.O_RDWR) for _ in [0,1]]
-		old = os.dup(1), os.dup(2)
-		os.dup2(nulls[0], 1)
-		os.dup2(nulls[1], 2)
-		
-		t = threading.Thread(target=runTensorflow, kwargs={'mog':self,'images':images})
-		t.start()
-		t.join()	
+		# Running Tensorflow in its own thread allows it to release control of the GPU
+		utils.isolatedFunctionRun(runTensorflow, True, mog=self, images=images)
 		
 		# Set up Caffe Model for comparison
-		self.coffee = caffe.Net(s.DEF_PROTOTXT_PATH, s.DEF_CAFFEMODEL_PATH, caffe.TEST)
-		transformer = caffe.io.Transformer({'data' : self.coffee.blobs['data'].data.shape})
-		"""
-		transformer.set_transpose('data', (2,0,1)) 	# Move color channels to left-most dimension
-		transformer.set_channel_swap('data', (2,1,0))	# Swap color channels from RGB to BGR
-	
-		transformed_image = transformer.preprocess('data', images)
-		self.coffee.blobs['data'].data[...] = transformed_image
-		"""
-		images2 = np.transpose(images, [2,0,1])
-		transformed_image = np.copy(images2[[2,1,0],:,:])
-		self.coffee.blobs['data'].data[...] = transformed_image
-		self.coffee.forward()
-
-		os.dup2(old[0],1)
-		os.dup2(old[1],2)
+		def runCaffe(self, images):
+			self.coffee = caffe.Net(s.DEF_PROTOTXT_PATH, s.DEF_CAFFEMODEL_PATH, caffe.TEST)
+			transformer = caffe.io.Transformer({'data' : self.coffee.blobs['data'].data.shape})
+			"""
+			transformer.set_transpose('data', (2,0,1)) 	# Move color channels to left-most dimension
+			transformer.set_channel_swap('data', (2,1,0))	# Swap color channels from RGB to BGR
 		
-		os.close(nulls[0])
-		os.close(nulls[1])
+			transformed_image = transformer.preprocess('data', images)
+			self.coffee.blobs['data'].data[...] = transformed_image
+			"""
+			images2 = np.transpose(images, [2,0,1])
+			transformed_image = np.copy(images2[[2,1,0],:,:])
+			self.coffee.blobs['data'].data[...] = transformed_image
+			self.coffee.forward()
+
+		utils.isolatedFunctionRun(runCaffe, True, self=self, images=images)
 
 	def returnBlob(self, layername, flavor):
 		"""
