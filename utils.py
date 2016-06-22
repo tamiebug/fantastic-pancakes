@@ -5,7 +5,7 @@ import settings as s
 
 from urllib import urlretrieve
 import threading
-
+import os
 import skimage.io
 import skimage.transform
 
@@ -73,9 +73,9 @@ def isolatedFunctionRun(func, textSuppress, *args, **kwargs):
 	Runs the function func, with arguments *args and **kwargs, in its own thread.
 	If textSupress = True, all console output will be redirected to os.devnull
 	"""
+	# Open two os.devnull
+	nulls = [os.open(os.devnull, os.O_RDWR) , os.open(os.devnull, os.O_RDWR)]
 	if textSuppress:
-		# Open two os.devnulls
-		null = [os.open(os.devnull, os.O_RDWR , os.open(os.devnull, os.O_RDWR)]
 		old = os.dup(1), os.dup(2)
 		# Set stderr and stdout to null
 		os.dup2(nulls[0], 1)
@@ -86,6 +86,10 @@ def isolatedFunctionRun(func, textSuppress, *args, **kwargs):
 	t.join()
 
 	if textSuppress:
+		# Restore stderr and stdout to previous state
+		os.dup2(old[0],1)
+		os.dup2(old[1],2)
 		# Close the os.devnulls	
 		os.close(nulls[0])
 		os.close(nulls[1])	
+	return
