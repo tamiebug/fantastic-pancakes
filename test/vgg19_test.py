@@ -173,17 +173,13 @@ class Vgg19SavingTest(unittest.TestCase):
 				output2 = sess.run(testLayerVariables)
 			self.assertEqual(len(output2), 2 * len(testLayers), msg="Incorrect number of output layers")		
 			# Check to make sure that the values are the same
-			for i, var in enumerate(self.output2):
-				np.testing.assert_equal(output[i], output2[i], error_msg="Output number %i was not equal"%i)
+			for i, var in enumerate(output2):
+				np.testing.assert_equal(output[i], output2[i], err_msg="Output number %i was not equal"%i)
 		finally:
-			"""
 			if os.path.isfile("models/"+weightsFn+".npz"):
 				os.remove("models/"+weightsFn+".npz")
 			if os.path.isfile("models/"+biasFn+".npz"):
 				os.remove("models/"+biasFn+".npz")
-			"""
-			pass
-			
 		
 if __name__ == '__main__':
 	unittest.main()

@@ -16,30 +16,6 @@ class Vgg19():
 		# Takes as input a Tensorflow placeholder or layer and whether
 		# the graph is being trained or whether it is trained.
 		self._extractCaffeLayers(weightsPath, biasesPath)
-		
-		
-		def createFirstConvLayer(bottom, name, trainable=True):
-			# Creats a convolutional Tensorflow layer with its weights
-			# permuted so that it takes RGB instead of BGR images as input
-			# Returns the bias layer so it can be plugged into other layers
-		
-			weightValues = self.weightsDict[name]
-			biasValues = self.biasesDict[name]
-						
-			# Tensorflow order	: [width, height, in_channels, out_channels]
-			# Caffe order		: [out_channels, in_channels, width, height]
-			# Hence, to translate from Caffe to Tensorflow
-			weightValues = weightValues.transpose((2,3,1,0))
-		
-			# Converting BGR to RGB
-			weightValues2 = numpy.copy(weightValues[:,:,[2,1,0],:])
-			
-			with tf.variable_scope(name) as scope:
-				weights = tf.Variable(weightValues2, trainable=trainable, name="Weights")
-				biases = tf.Variable(biasValues, trainable=trainable, name="Bias")
-				conv = tf.nn.conv2d(bottom, weights, [1,1,1,1], padding="SAME")
-				bias = tf.nn.bias_add(conv, biases)
-			return bias				
 			
 		def createConvLayer(bottom, name, trainable=True):
 			# Creates a convolutional Tensorflow layer given the name
@@ -47,11 +23,7 @@ class Vgg19():
 			# biasesDict in order to obtain the parameters to construct the
 			# layer
 
-			# Tensorflow order	: [height, width, in_channels, out_channels]
-			# Caffe order		: [out_channels, in_channels, width, height]
-			# Hence, to translate from Caffe to Tensorflow
-			weightValues = self.weightsDict[name].transpose((2,3,1,0))
-			
+			weightValues = self.weightsDict[name]
 			biasValues = self.biasesDict[name]
 
 			with tf.variable_scope(name) as scope:
@@ -69,17 +41,7 @@ class Vgg19():
 			INPUT_SIZE = 25088
 			OUTPUT_SIZE = 4096
 			
-			weightValues = self.weightsDict[name]
-			assert weightValues.shape == (OUTPUT_SIZE, INPUT_SIZE)
-
-			# Reshape the weights to their unsquashed form 
-			weightValues = weightValues.reshape((OUTPUT_SIZE, 512, 7, 7))
-
-			# Transpose the weights so that it takes as input tensors in the
-			# tensorflow order instead of the caffe order
-			weightValues = weightValues.transpose((2, 3, 1, 0))
-			weightValues = weightValues.reshape(INPUT_SIZE, OUTPUT_SIZE)
-			
+			weightValues = self.weightsDict[name]	
 			biasValues = self.biasesDict[name]
 			
 			with tf.variable_scope(name) as scope:
@@ -98,9 +60,6 @@ class Vgg19():
 
 			INPUT_SIZE = 4096
 			weightValues = self.weightsDict[name]
-
-			# Swapping in_channel and out_channel for tf
-			weightValues = weightValues.transpose((1,0))
 			biasValues = self.biasesDict[name]
 			
 			with tf.variable_scope(name) as scope:
@@ -112,18 +71,15 @@ class Vgg19():
 
 		# All layer types have been defined, it is now time to actually make the model
 		self.layers = {}
-		layerNames = [	           'relu1_1', 'conv1_2', 'relu2_2', 'pool1',
+		layerNames = [	'conv1_1', 'relu1_1', 'conv1_2', 'relu2_2', 'pool1',
 						'conv2_1', 'relu2_1', 'conv2_2', 'relu2_2', 'pool2', 
 						'conv3_1', 'relu3_1', 'conv3_2', 'relu3_2', 'conv3_3', 'relu3_3', 'conv3_4', 'relu3_4', 'pool3',
 						'conv4_1', 'relu4_1', 'conv4_2', 'relu4_2', 'conv4_3', 'relu4_3', 'conv4_4', 'relu4_4', 'pool4',
 						'conv5_1', 'relu5_1', 'conv5_2', 'relu5_2', 'conv5_3', 'relu5_3', 'conv5_4', 'relu5_4', 'pool5' ]
 
 		with tf.variable_scope(self.namespace) as scope:
-			# The first convolutional layer is special!  We must do it separately.
-			self.layers['conv1_1'] = createFirstConvLayer(img, 'conv1_1', trainable=train)
-			
 			# We start out with the input img
-			prevLayer = self.layers['conv1_1']
+			prevLayer = img
 			for layername in layerNames:
 				if layername.startswith('conv'):
 					self.layers[layername] = createConvLayer(prevLayer, layername, train)
@@ -175,8 +131,6 @@ class Vgg19():
 					weightsVar.append(var)
 				if "Bias" in var.name:
 					biasVar.append(var)
-		print weightsVar
-		print biasVar
 		fullVarList = biasVar + weightsVar			
 		with tf.Session() as sess:
 			sess.run(tf.initialize_all_variables())

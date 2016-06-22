@@ -61,9 +61,42 @@ def coffeeMachine(prototxtPath=s.DEF_PROTOTXT_PATH, caffemodelPath=s.DEF_CAFFEMO
 	Extract the weights and biases from the .caffemodel and save it in npz files named
 	DEF_WEIGHTS_PATH and DEF_BIASES_PATH
 	"""	
+	# Extract Caffe weights and biases
 	coffee = caffe.Net(prototxtPath, caffemodelPath, caffe.TEST)
 	caffeVggWeights = { name: blobs[0].data for name, blobs in coffee.params.iteritems() }
 	caffeVggBiases = { name: blobs[1].data for name, blobs in coffee.params.iteritems() }
+
+	for name in caffeVggWeights:
+		if "conv" in name:
+			# Tensorflow order	: [width, height, in_channels, out_channels]
+			# Caffe order		: [out_channels, in_channels, width, height]
+			# Hence, to translate from Caffe to Tensorflow
+			caffeVggWeights[name] = caffeVggWeights[name].transpose((2,3,1,0))
+			if "conv1_1" in name:
+				# Converting BGR to RGB
+				caffeVggWeights['conv1_1'] = numpy.copy(caffeVggWeights['conv1_1'][:,:,[2,1,0],:])
+
+		elif "fc6" in name:
+			INPUT_SIZE = 25088
+			OUTPUT_SIZE = 4096
+	
+			# Reshape the weights to their unsquashed form
+			caffeVggWeights[name] = caffeVggWeights[name].reshape((OUTPUT_SIZE, 512, 7, 7))
+			
+			# Transpose the weights so that it is in the tensorflow instead of caffe order
+			caffeVggWeights[name] = caffeVggWeights[name].transpose((2,3,1,0))
+			caffeVggWeights[name] = caffeVggWeights[name].reshape(INPUT_SIZE, OUTPUT_SIZE)
+
+		elif "fc" in name:
+			# Since elif, not "fc6"			
+			# Tensorflow order	: [in_channels, out_channels]
+			# Caffe order		: [out_channels, in_channels]
+			caffeVggWeights[name] = caffeVggWeights[name].transpose((1,0))
+			
+		else:
+			# Error in loading model, raise exception
+			raise StandardError("Warning, model being saved as .npz file has non-standard field names")
+			
 	numpy.savez(s.DEF_WEIGHTS_PATH, **caffeVggWeights)
 	numpy.savez(s.DEF_BIASES_PATH, **caffeVggBiases)
 	print "Coffee successfully brewed"
