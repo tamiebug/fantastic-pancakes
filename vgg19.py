@@ -6,16 +6,17 @@ class Vgg19():
 	def __init__(self, namespace="vgg19"):
 		self.namespace=namespace
 		
-	def _extractCaffeLayers(self, weightsPath=s.DEF_WEIGHTS_PATH,
-							biasesPath=s.DEF_BIASES_PATH):
+	def _extractCaffeLayers(self, weightsPath, biasesPath):
 		# Loads parameters from .npz files, one for the weights and another for the biases
 		self.weightsDict = numpy.load(weightsPath)
 		self.biasesDict = numpy.load(biasesPath)
 
-	def buildGraph(self, img, train=False):
+	def buildGraph(self, img, train=False, weightsPath=s.DEF_WEIGHTS_PATH,
+					biasesPath=s.DEF_BIASES_PATH):
 		# Takes as input a Tensorflow placeholder or layer and whether
 		# the graph is being trained or whether it is trained.
-		self._extractCaffeLayers()
+		self._extractCaffeLayers(weightsPath, biasesPath)
+		
 		
 		def createFirstConvLayer(bottom, name, trainable=True):
 			# Creats a convolutional Tensorflow layer with its weights

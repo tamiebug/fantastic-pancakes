@@ -8,6 +8,7 @@ import settings as s
 
 import threading
 import os, sys
+import random
 import unittest
 
 class ModelOutputGenerator():
@@ -79,7 +80,7 @@ class ModelOutputGenerator():
 		else:
 			raise KeyError("Caffe and tensorflow are the only allowed blob flavors")
 		
-class vgg19LayerActivationsTest(unittest.TestCase):				
+class Vgg19LayerActivationsTest(unittest.TestCase):				
 	def setUp(self):
 		self.model = ModelOutputGenerator()
 		return
@@ -129,6 +130,60 @@ class vgg19LayerActivationsTest(unittest.TestCase):
 		
 	def test_prob(self):
 		self.blob_tensor_equality_assert('prob', .01, [0])
+
+class Vgg19SavingTest(unittest.TestCase):
+	"""
+	Loads the vgg19 base model, saves it, then reloads it once more in order to test that the
+	weights and biases are being properly saved and loaded
+	"""
+	def testSave(self):
+		# Layers to be tested
+		testLayers = ['conv1_1', 'conv2_1', 'conv3_4', 'conv4_4', 'fc6'  , 'fc7']
+		img = tf.placeholder("float", [1, 224, 224, 3], name="images")
+		model = vgg19.Vgg19()
+		model.buildGraph(img, train=False)
+
+		testLayerVariables = []
+
+		for layer in testLayers:
+			testLayerVariables.append("vgg19/" + layer + "/Weights:0")
+			testLayerVariables.append("vgg19/" + layer + "/Bias:0")			
+
+		# Find the weights and biases for several layers in a model
+		try:
+			with tf.Session() as sess:
+				sess.run(tf.initialize_all_variables())
+				output = sess.run(testLayerVariables)
+				randNum = None
+				# Save the weights/biases in a file
+				while True:
+					randNum = random.random()
+					weightsFn = str(randNum) + "testWeights"
+					biasFn = str(randNum) + "testBias"
+					if os.path.isfile("models/" + weightsFn) or os.path.isfile("models/" + biasFn):
+						continue
+					else:
+						model.saveModel(weightsFn, biasFn)
+						break
+			# Load the weights/biases into a new model
+			model2 = vgg19.Vgg19()
+			model2.buildGraph(img, train=False, weightsPath="models/"+weightsFn+".npz", biasesPath="models/"+biasFn+".npz")
+			with tf.Session() as sess:
+				sess.run(tf.initialize_all_variables())
+				output2 = sess.run(testLayerVariables)
+			self.assertEqual(len(output2), 2 * len(testLayers), msg="Incorrect number of output layers")		
+			# Check to make sure that the values are the same
+			for i, var in enumerate(self.output2):
+				np.testing.assert_equal(output[i], output2[i], error_msg="Output number %i was not equal"%i)
+		finally:
+			"""
+			if os.path.isfile("models/"+weightsFn+".npz"):
+				os.remove("models/"+weightsFn+".npz")
+			if os.path.isfile("models/"+biasFn+".npz"):
+				os.remove("models/"+biasFn+".npz")
+			"""
+			pass
+			
 		
 if __name__ == '__main__':
 	unittest.main()
