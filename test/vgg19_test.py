@@ -163,7 +163,7 @@ class Vgg19SavingTest(unittest.TestCase):
 					if os.path.isfile("models/" + weightsFn) or os.path.isfile("models/" + biasFn):
 						continue
 					else:
-						model.saveModel(weightsFn, biasFn)
+						model.save(weightsFn, biasFn)
 						break
 			# Load the weights/biases into a new model
 			model2 = vgg19.Vgg19()

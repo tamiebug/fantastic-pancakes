@@ -8,9 +8,20 @@ class Vgg19():
 		
 	def _extractCaffeLayers(self, weightsPath, biasesPath):
 		# Loads parameters from .npz files, one for the weights and another for the biases
+
+		if not weightsPath.startswith("models/"):
+			weightsPath = "models/" + weightsPath
+		if not biasesPath.startswith("models/"):
+			biasesPath = "models/" + biasesPath
+		if not weightsPath.endswith(".npz"):
+			weightsPath = weightsPath + ".npz"
+		if not biasesPath.endswith(".npz"):
+			biasesPath = biasesPath + ".npz"
+
 		self.weightsDict = numpy.load(weightsPath)
 		self.biasesDict = numpy.load(biasesPath)
 
+ 
 	def buildGraph(self, img, train=False, weightsPath=s.DEF_WEIGHTS_PATH,
 					biasesPath=s.DEF_BIASES_PATH):
 		# Takes as input a Tensorflow placeholder or layer and whether
@@ -115,7 +126,7 @@ class Vgg19():
 			self.layers['fc8'] = createFcLayer(prevLayer, 'fc8', trainable=train)
 			self.layers['prob'] = tf.nn.softmax(self.layers['fc8'], name='prob')
 			
-	def saveModel(self, weightsName, biasesName, overwrite=False):
+	def save(self, weightsName, biasesName, overwrite=False):
 		"""
 		Saves the current weights and biases for the model as files named
 		weightsName and biasesName, respectively, in the models/ directory.
