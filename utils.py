@@ -125,4 +125,5 @@ def isolatedFunctionRun(func, textSuppress, *args, **kwargs):
 		# Close the os.devnulls	
 		os.close(nulls[0])
 		os.close(nulls[1])	
+	print "wow!"
 	return

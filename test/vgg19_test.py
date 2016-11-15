@@ -26,7 +26,7 @@ class ModelOutputGenerator():
 		images = utils.loadImage(s.DEF_TEST_IMAGE_PATHS[0])	
 			
 		# Set up Tensorflow Model
-		def runTensorflow(mog, images):
+		def runTensorflow(self, images):
 			with tf.Session() as sess:
 				with tf.device("/cpu:0"):
 					# Tensorflow does not know how to release /GPU:0 resources without process termination
@@ -41,17 +41,20 @@ class ModelOutputGenerator():
 					
 					sess.run(tf.initialize_all_variables())
 					#print self.model.layers.keys()
-					mog.output = sess.run([model.layers[_] for _ in mog.testLayers], 
+					self.output = sess.run([model.layers[_] for _ in self.testLayers], 
 											feed_dict={ img: images})
 					
 					sess.close()
+
 			return
 		
 		# Running Tensorflow in its own thread allows it to release control of the GPU
-		utils.isolatedFunctionRun(runTensorflow, True, mog=self, images=images)
+		utils.isolatedFunctionRun(runTensorflow,True, self=self, images=images)
 		
 		# Set up Caffe Model for comparison
 		def runCaffe(self, images):
+			if s.CAFFE_USE_CPU:
+				caffe.set_mode_cpu()
 			self.coffee = caffe.Net(s.DEF_PROTOTXT_PATH, s.DEF_CAFFEMODEL_PATH, caffe.TEST)
 			transformer = caffe.io.Transformer({'data' : self.coffee.blobs['data'].data.shape})
 			"""
@@ -66,12 +69,17 @@ class ModelOutputGenerator():
 			self.coffee.blobs['data'].data[...] = transformed_image
 			self.coffee.forward()
 
+		# Running Caffe in its own thread to avoid conflicts
 		utils.isolatedFunctionRun(runCaffe, True, self=self, images=images)
+		print "We did runCaffe, yes!"
 
 	def returnBlob(self, layername, flavor):
 		"""
 		Returns a layer of name layername in either the tf or caffe model.
 		"""
+
+		print vars(self)
+
 		if flavor=="caffe":
 			caffeLayer = self.caffeTestLayers[self.testLayers.index(layername)]
 			return self.coffee.blobs[caffeLayer].data
