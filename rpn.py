@@ -33,13 +33,13 @@ class Rpn():
 			rpnProb = tf.reshape(prevLayer, (1,18,14,14))
 			
 			# Region Proposal Network - Bounding Box Proposal Regression
-			rpnBboxPrer = tf.createConvLayer(layer3x3, "rpn_bbox_pred")
-	
-		
+			rpnBboxPred = tf.createConvLayer(layer3x3, "rpn_bbox_pred")
+			
+				
 
-def proposalLayer(anchors, feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
-					scores, bbox_regressions, feature_h, feature_w, img_w, img_h,
-					minimum_dim
+def proposalLayer(anchors, feature_stride, iou_threshold, pre_nms_keep, post_nms_keep, \
+					scores, bbox_regressions, feature_h, feature_w, img_w, img_h, \
+					minimum_dim \
 					):
 	""" 
 	Propose the actual regions given outputs of previous conv layers
@@ -103,7 +103,7 @@ def proposalLayer(anchors, feature_stride, iou_threshold, pre_nms_keep, post_nms
 	# To be able to select elements from top_anchors with these indices, we need to transpose it back
 	
 	top_anchors_detransposed = tf.transpose(top_anchors_transposed, (0,1))
-	
+		
 	final_anchors = tf.gather(top_anchors, post_nms_indices)
 	final_scores = tf.gather(top_scores, post_nms_indices)
 
@@ -155,17 +155,17 @@ def clipRegions(anchors, img_w, img_h):
 	max_x = tf.constant([img_w])
 	max_y = tf.constant([img_h])
 
-	x1_clipped = tf.maximum(tf.minimum(zero, x1), max_x))
-	x2_clipped = tf.maximum(tf.minimum(zero, x2), max_x))
-	y1_clipped = tf.maximum(tf.minimum(zero, y1), max_y))
-	y2_clipped = tf.maximum(tf.minimum(zero, y2), max_y))
+	x1_clipped = tf.maximum(tf.minimum(zero, x1), max_x)
+	x2_clipped = tf.maximum(tf.minimum(zero, x2), max_x)
+	y1_clipped = tf.maximum(tf.minimum(zero, y1), max_y)
+	y2_clipped = tf.maximum(tf.minimum(zero, y2), max_y)
 
 	# Pack 'em back up
 	retVal = tf.pack([x1_clipped, y1_clipped, x2_clipped, y2_clipped],1)
 
 	return retVal
 
-def generateShiftedAnchors(anchors, feature_h, feature_w)
+def generateShiftedAnchors(anchors, feature_h, feature_w):
 	""" Generate shifted anchors to be regressed into the final RPN output
 
 	A score is created for every anchor at each feature.  Using feature_stride,
@@ -182,7 +182,7 @@ def generateShiftedAnchors(anchors, feature_h, feature_w)
 	for x in x_locations:
 		for y in y_locations:
 			for i, anchor in enumerate(anchors):
-				shifted_anchors[0,y,x,4*i:4*(i+1)] = \ 
+				shifted_anchors[0,y,x,4*i:4*(i+1)] = \
 					[anchor[0] + x, anchor[1] + y,
 					anchor[2] + x, anchor[3] + y]
 	
@@ -221,8 +221,8 @@ def regressAnchors(anchors, bbox_regressions, numBaseAnchors, feature_h, feature
 
 	# Since logarithms of the values in question are easier to learn (no regression means
 	# a logarithm of the change being zero), we learn the logarithms of h, w.
-	w_new = tf.mul(tf.exp(dw),w))
-	h_new = tf.mul(tf.exp(dh),h))
+	w_new = tf.mul(tf.exp(dw),w)
+	h_new = tf.mul(tf.exp(dh),h)
 
 	# Transform back to the original (x1,y1,x2,y2) coordinate system
 	x1_final = tf.sub(x_new, tf.mul(tf.constant([.5], w_new)))
