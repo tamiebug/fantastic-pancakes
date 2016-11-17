@@ -66,3 +66,6 @@ models/
 
 # Virtualenv
 tens/
+
+#.swp files from vim
+*.swp
