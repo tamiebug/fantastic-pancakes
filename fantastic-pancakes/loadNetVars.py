@@ -1,6 +1,6 @@
 import numpy
 import tensorflow as tf
-import settings as s
+import util.settings as s
 
 def extractLayers(scope, weightsPath, biasesPath):
 	# Loads parameters from .npz files, one for the weights and another for the biases

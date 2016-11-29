@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-import settings as s
+import utils.settings as s
 import loadNetVars
 
 class Rpn():

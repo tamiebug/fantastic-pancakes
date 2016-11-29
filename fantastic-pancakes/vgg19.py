@@ -1,6 +1,6 @@
 import numpy
 import tensorflow as tf
-import settings as s
+import util.settings as s
 import loadNetVars
 
 class Vgg19():

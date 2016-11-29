@@ -7,7 +7,7 @@ TARGET = rpl
 #CFLAGS += -undefined dynamic_lookup
 
 # Comment line below if using gcc4 OR if compiled tensorflow from source with gcc5 or later
-CFLAGS += -DGLIBCXX_USE_CXX11_ABI=0
+CFLAGS += -D_GLIBCXX_USE_CXX11_ABI=0
 
 
 TENSORFLOW_INCLUDE_DIR := $(shell python -c 'import tensorflow as tf; print(tf.sysconfig.get_include())') 
