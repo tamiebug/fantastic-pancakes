@@ -88,7 +88,7 @@ def proposalLayer(anchors, feature_stride, iou_threshold, pre_nms_keep, post_nms
 
 	clippedAnchors = clipRegions(regressedAnchors, img_w, img_h)
 
-	p_scores, p_anchors = prundedScoresAndAnchors(clippedAnchors, minimum_dim,
+	p_scores, p_anchors = prunedScoresAndAnchors(clippedAnchors, minimum_dim,
 							feature_h, feature_w, scores)  
 
 	top_scores, top_score_indices = tf.nn.top_k(p_scores, k=pre_nms_keep)
@@ -102,7 +102,7 @@ def proposalLayer(anchors, feature_stride, iou_threshold, pre_nms_keep, post_nms
 	
 	# To be able to select elements from top_anchors with these indices, we need to transpose it back
 	
-	top_anchors_detransposed = tf.transpose(top_anchors_transposed, (0,1))
+	#top_anchors_detransposed = tf.transpose(top_anchors_transposed, (0,1))
 		
 	final_anchors = tf.gather(top_anchors, post_nms_indices)
 	final_scores = tf.gather(top_scores, post_nms_indices)
