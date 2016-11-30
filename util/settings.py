@@ -13,3 +13,12 @@ DEF_TEST_IMAGE_PATHS = ["test/images/Cat.jpg", "test/images/EnglishSetter.jpg", 
 # If you wish to use a CPU for extraction of caffe weights to avoid GPU memory overuse or
 # hassle of caffe GPU configuration, set this to True
 CAFFE_USE_CPU = True
+
+
+# Proposal layer constants
+
+DEF_FEATURE_STRIDE = 16
+DEF_IOU_THRESHOLD = .7
+DEF_PRE_NMS_KEEP = 12000
+DEF_POST_NMS_KEEP = 2000
+DEF_MIN_PROPOSAL_DIMS = 16 #In image pixels

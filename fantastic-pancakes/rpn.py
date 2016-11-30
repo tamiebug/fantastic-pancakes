@@ -3,41 +3,75 @@ import tensorflow as tf
 import utils.settings as s
 import loadNetVars
 
-class Rpn():
-	def __init__(self, namespace="rpn"):
-		self.namespace=namespace
+def Rpn(features, img_w, img_h, feature_w, feature_h, train=False, namespace="rpn"):
+    """ Region proposal network.  Proposes regions to later be pooled and classified/regressed
 
+    Inputs:
+    features    - a tf.Tensor object of rank 4, dimensions (batch, height, width, channel),
+        since this is the standard tensorflow order.
+    img_w       - This network currently does not support variable image sizes.  img_w is the
+        width of the input images to the base network
+    img_h       - same as above, but the height instead of the width
+    feature_w   - Width of the feature output of the base classification network.  It should be
+        the case that img_w/feature_w = s.DEF_FEATURE_STRIDE
+    feature_h   - Height of the feature output of the base classification network.
 
-	def buildGraph(self, features, train=False):
+    Output:
+        A tf.tensor object of rank 2 with dimensions (num_rois, 4), where the second dimension
+        is of the form {x0, y0, x1, y1}
+    """
 
-		def createConvLayer(bottom, name, stride=[1,1,1,1]):
-		# Creates a convolutional Tensorflow layer given the name
-		# of the layer.  Expects a tf.Variable with name
-		# model_scope/layer_scope/Weights and one with name
-		# model_scope/layer_scope/Bias to already exist.
-			with tf.variable_scope(name) as scope:
-				scope.reuse_variables()
-				prevLayer = tf.nn.conv2d(bottom, tf.get_variable("Weights"), stride,
-									padding="SAME")
-				prevLayer = tf.nn.bias_add(prevLayer, tf.get_variable("Bias"))
-			return prevLayer
+    num_anchors = 9
 
-		with tf.variable_scope(self.namespace) as model_scope:
-			
-			layer3x3 = createConvLayer(features, "rpn_conv/3x3")
-			
-			# Region Proposal Network - Probabilities
-			prevLayer = createConvLayer(layer3x3, "rpn_cls_score")
-			prevLayer = tf.reshape(prevLayer, (0,2,-1,0))			
-			prevLayer = tf.nn.softmax(prevLayer, name="rpn_cls_prob")
-			rpnProb = tf.reshape(prevLayer, (1,18,14,14))
-			
-			# Region Proposal Network - Bounding Box Proposal Regression
-			rpnBboxPred = tf.createConvLayer(layer3x3, "rpn_bbox_pred")
-			
-				
+    def createConvLayer(bottom, name, stride=[1,1,1,1]):
+    # Creates a convolutional Tensorflow layer given the name
+    # of the layer.  Expects a tf.Variable with name
+    # model_scope/layer_scope/Weights and one with
+    # model_scope/layer_scope/Bias to already exist.
+            with tf.variable_scope(name) as scope:
+                    scope.reuse_variables()
+                    prevLayer = tf.nn.conv2d(bottom, tf.get_variable("Weights"), stride,
+                                                            padding="SAME")
+                    prevLayer = tf.nn.bias_add(prevLayer, tf.get_variable("Bias"))
+            return prevLayer
 
-def proposalLayer(anchors, feature_stride, iou_threshold, pre_nms_keep, post_nms_keep, \
+    with tf.variable_scope(self.namespace) as model_scope:
+            layer3x3 = createConvLayer(features, "rpn_conv/3x3")
+            
+            # Region Proposal Network - Probabilities
+
+            prevLayer = createConvLayer(layer3x3, "rpn_cls_score")
+
+            # Assuming that feat_w = feat_h = 14, and that the number of anchors is 9,
+            # we have the output should be of shape (1,14,14,18).
+            # We want to reshape this for softmax.  Reshape to (1,14,14*9,2),
+            # which simply is (1, 14, 126, 2), and softmax on the last dimension.
+            prevLayer = tf.reshape(prevLayer, (1,feat_h, feat_w * num_anchors, 2),
+                    name="rpn_cls_score_reshape")
+            
+            # The dimension on which softmax is performed is automatically the last one
+            prevLayer = tf.nn.softmax(prevLayer, name="rpn_cls_prob")
+            rpnProb = tf.reshape(prevLayer, (1,feat_h, feat_w, num_anchors*2))
+            
+            # Region Proposal Network - Bounding Box Proposal Regression
+            rpnBboxPred = tf.createConvLayer(layer3x3, "rpn_bbox_pred")
+            
+            # call the proposal layer here
+            out = proposalLayer(s.DEF_FEATURE_STRIDE,
+                                s.DEF_IOU_THRESHOLD,
+                                s.DEF_PRE_NMS_KEEP,
+                                s.DEF_POST_NMS_KEEP,
+                                rpnProb,
+                                rpnBboxPred,
+                                feature_h,
+                                feature_w,
+                                img_w,
+                                img_h,
+                                s.DEF_MIN_PROPOSAL_DIMS
+                            )
+            return out
+
+def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep, \
 					scores, bbox_regressions, feature_h, feature_w, img_w, img_h, \
 					minimum_dim \
 					):
@@ -45,9 +79,6 @@ def proposalLayer(anchors, feature_stride, iou_threshold, pre_nms_keep, post_nms
 	Propose the actual regions given outputs of previous conv layers
 
 	Arguments:
-
-	anchors 		-- A list of anchors on which the proposal regions will be based
-
 	feature_stride 	-- Ratio of number of features in the last layer of the base
 	convolutional layer to the number of pixels in the image input layer.  Equal
 	to 16 for VGGNet and ZF
@@ -77,42 +108,53 @@ def proposalLayer(anchors, feature_stride, iou_threshold, pre_nms_keep, post_nms
 	img_h			-- Input layer image height (in pixels)
 
 	minimum_dim		-- Smallest allowed anchor side dimension.
+
+        Output:
+        A tuple consisting of...
+        A tf.Tensor object of rank two with shape (num_rois, 4), the second dimension having the
+        structure (x0, y0, x1, y1)
+        And, A tf.Tensor object of rank one with shape (num_rois containing scores
+
 	"""
 	
 	baseAnchors = generateAnchors(ratios=[2,1,.5])
 
 	shiftedAnchors = generateShiftedAnchors(baseAnchors, feature_h, feature_w)
 
-	regressedAnchors = regressAnchcors(shiftedAnchors, bbox_regressions,
-							len(baseAnchors), feature_h, feature_w)
+	regressedAnchors = regressAnchcors(shiftedAnchors, bbox_regressions)
 
-	clippedAnchors = clipRegions(regressedAnchors, img_w, img_h)
+	clippedAnchors = clipRegions(regressedAnchors, img_h, img_w)
 
-	p_scores, p_anchors = prunedScoresAndAnchors(clippedAnchors, minimum_dim,
-							feature_h, feature_w, scores)  
+	p_anchors, p_scores = prunedScoresAndAnchors(clippedAnchors, scores, minimum_dim)  
 
-	top_scores, top_score_indices = tf.nn.top_k(p_scores, k=pre_nms_keep)
-	top_anchors = tf.gather(p_anchors, top_score_indices)
+        # Depending on how we are doing this score ranking, we might use either the yes score
+        # or the no score...
+        # Assuming the yes score is the first part of it (not even sure this is how it works)
+        yes_scores, _ = tf.unstack(p_scores, 3)
 
+	top_scores, top_score_indices = tf.nn.top_k(yes_scores, k=pre_nms_keep)
+	top_anchors = tf.gather_nd(p_anchors, top_score_indices)
+            
 	# Changing shape into form [num_boxes,4] as required by tf.image.non_max_suppression
-	top_anchors_transposed = tf.tranpose(top_anchors,(0,1))
+	top_anchors_reshaped = tf.reshape((-1,4))
 
-	post_nms_indices = tf.image.non_max_suppression(top_anchors_transposed, top_scores, 
+        # Might not need to reshape scores, might need to reshape scores.
+        top_scores_reshaped = tf.reshape((-1))
+
+	post_nms_indices = tf.image.non_max_suppression(top_anchors_reshaped, top_scores_reshaped,
 							post_nms_keep, iou_threshold=iou_threshold)
 	
-	# To be able to select elements from top_anchors with these indices, we need to transpose it back
-	
-	#top_anchors_detransposed = tf.transpose(top_anchors_transposed, (0,1))
-		
-	final_anchors = tf.gather(top_anchors, post_nms_indices)
-	final_scores = tf.gather(top_scores, post_nms_indices)
+	final_anchors = tf.gather_nd(top_anchors_reshaped, post_nms_indices)
+	final_scores = tf.gather_nd(top_scores_reshaped, post_nms_indices)
 
-	# Remember to reshape final_anchors
-	return final_anchors
+	return final_anchors, final_scores
 
-def prunedScoresAndAnchors(anchors, numBaseAnchors, minimum_dim, feature_h, feature_w, scores):
-	""" Return list of anchors and scores larger than a given minimum size """
-	x1,y1,x2,y2 = tf.unpack(anchors, 1)
+def prunedScoresAndAnchors(anchors, scores, minimum_dim):
+	""" Return list of anchors and scores larger than a given minimum size
+        
+            It is assumed that the shape of scores is (numAnchors, feat_h, feat_w, 2)
+        """
+	x1,y1,x2,y2 = tf.unpack(anchors, 3)
 
 	w = tf.sub(x2,x1)
 	h = tf.sub(y2,y1)
@@ -121,47 +163,32 @@ def prunedScoresAndAnchors(anchors, numBaseAnchors, minimum_dim, feature_h, feat
 	height_suffices = tf.greater_equal(h, tf.constant([minimum_dim+1]))
 	
 	both_suffice = tf.logical_and(width_suffices, height_suffices)
-	
-	# Current dimensionality is (1, numBaseAnchors, feature_h, feature_w)
-	# For ease of indexing and NMS, we will squash this to
-	# ( numBaseAnchors * feature_h * feature_w) to work around tensorflow limitations
-	
-	both_suffice_reshape = tf.reshape(both_suffice, (numBaseAnchors*feature_h*feature_w))
+        indices = np.where(both_suffice)
+        
+        # The actual grabbing of indexed values happens here
+        anchors_gathered = tf.gather_nd(anchors, indices)
+        scores_gathered = tf.gather_nd(anchors, indices)
 
-	# We can only select indices from the first dimension, so we need to do a transpose
-	both_suffice_transposed = tf.transpose(both_suffice_reshape, (0,1))
+        return anchors_gathered, scores_gathered
 	
-	indices = np.where(both_suffice_transpose)
-	
-	# Massage both anchors and scores into compatible forms.
-	anchors_reshape = tf.reshape(anchors, (4, numBaseAnchors*feature_h*feature_w))
-	anchors_transpose = tf.transpose(anchors_reshape, (0,1))
-	scores_reshape = tf.reshape(scores, (numBaseAnchors*feature_h*feature_w))
-	scores_transpose = tf.transpose(scores_transpose, (0,1))
-	
-	anchors_gathered = np.gather(anchors_transpose, indices)
-	scores_gathered = np.gather(scores_transpose, indices)
-	
-	# We really just need lists of anchors in the end, so these shapes will do for now.
-	return anchors_gathered, scores_gathered
-
-	
-def clipRegions(anchors, img_w, img_h):
+def clipRegions(anchors, img_h, img_w):
 	""" Clip anchors so that all lie entirely within image """
 
-	x1, y1, x2, y2 = tf.unpack(anchors, 1)
+        # Input anchors will be of shape
+        # (numBaseAnchors, feature_h, feature_w, 4)
+	x1, y1, x2, y2 = tf.unstack(anchors, 3) 
 	
 	zero = tf.constant([0.])
 	max_x = tf.constant([img_w])
 	max_y = tf.constant([img_h])
 
-	x1_clipped = tf.maximum(tf.minimum(zero, x1), max_x)
-	x2_clipped = tf.maximum(tf.minimum(zero, x2), max_x)
-	y1_clipped = tf.maximum(tf.minimum(zero, y1), max_y)
-	y2_clipped = tf.maximum(tf.minimum(zero, y2), max_y)
+	x1_clipped = tf.minimum(tf.maximum(zero, x1), max_x)
+	x2_clipped = tf.minimum(tf.maximum(zero, x2), max_x)
+	y1_clipped = tf.minimum(tf.maximum(zero, y1), max_y)
+	y2_clipped = tf.minimum(tf.maximum(zero, y2), max_y)
 
 	# Pack 'em back up
-	retVal = tf.pack([x1_clipped, y1_clipped, x2_clipped, y2_clipped],1)
+	retVal = tf.pack([x1_clipped, y1_clipped, x2_clipped, y2_clipped],3)
 
 	return retVal
 
@@ -178,18 +205,17 @@ def generateShiftedAnchors(anchors, feature_h, feature_w):
 	x_locations = range(0, feature_w) * feature_stride
 	y_locations = range(0, feature_h) * feature_stride
 
-	shifted_anchors = np.zeros((1, 4*len(anchors), feature_h, feature_w)) 
+	shifted_anchors = np.zeros((len(anchors), feature_h, feature_w, 4)) 
 	for x in x_locations:
 		for y in y_locations:
 			for i, anchor in enumerate(anchors):
-				shifted_anchors[0,y,x,4*i:4*(i+1)] = \
+                            shifted_anchors[i,y,x,:] = \
 					[anchor[0] + x, anchor[1] + y,
 					anchor[2] + x, anchor[3] + y]
-	
-	# Output has shape (1,4*len(anchors), feature_h, feature_w))
+        # Last dimension has form {x0, y0, x1, y1}
 	return shifted_anchors
 
-def regressAnchors(anchors, bbox_regressions, numBaseAnchors, feature_h, feature_w):
+def regressAnchors(anchors, bbox_regression):
 	""" Given preliminary bounding boxes, regress them to their final location
 	
 	The bounding box regressions are outputs of convolutional layers and of
@@ -198,15 +224,15 @@ def regressAnchors(anchors, bbox_regressions, numBaseAnchors, feature_h, feature
 	x and y displacements; they must be mulitiplied by the width and height of a given
 	bounding box to arrive at the actual displacements.
 	"""
+        # Our shifted anchors come in the shape (numBaseAnchors, feat_h, feat_w, 4)
+        # We want to separate out the 4 regression variables, {dx,dy,dw,dh}, out into their
+        # own fith dimension for the output of the regression as well!
 
-	# First we have to reshape our anchors list to more easily access elements
-	# anchors.shape = (1,4*numBaseAnchors, feature_h, feature_w)
-
-	reshapedAnchors = tf.reshape(anchors, (1,4, numBaseAnchors, feature_h, feature_w))
-	reshapedBbox_regs = tf.reshape(bbox_regressions, (1,4, numBaseAnchors, feature_h, feature_w))
-	
-	x1, y1, x2, y2 = tf.unpack(reshapedAnchors, 1)
-	dx, dy, dw, dh = tf.unpack(reshapedBbox_regs, 1)
+        # (Actually, we're going to assume that the regressions are ALSO in the form
+        # (numBaseAnchors, feat_h, feat_w, 4) !  This can be enforced at another stage.
+        
+	x1, y1, x2, y2 = tf.unstack(reshapedAnchors, 3)
+	dx, dy, dw, dh = tf.unstack(reshapedBbox_regs, 3)
 
 	# We must get the anchors into the same width/height x/y format as the bbox_regressions
 	x = tf.div(tf.add(x1, x2), tf.constant([2.]))
@@ -231,10 +257,10 @@ def regressAnchors(anchors, bbox_regressions, numBaseAnchors, feature_h, feature
 	y2_final = tf.add(y_new, tf.mul(tf.constant([.5], h_new)))
 
 	# Stack our anchors back up
-	regressedAnchors = tf.pack([x1_final, y1_final, x2_final, y2_final], 1)
+	regressedAnchors = tf.pack([x1_final, y1_final, x2_final, y2_final], 3)
 	
-	# The output shape differs from the input shape;  Output shape is
-	# regressedAnchors.shape = (1, 4, numBaseAnchors, feature_h, feature_y)
+	# The output shape is the same as the input shape;  Output shape is
+	# regressedAnchors.shape = (numBaseAnchors, feature_h, feature_w, 4)
 	return regressedAnchors
 	
 def generateAnchors(ratios=[.5,1,2], scales=[8,16,32], base=[1,1,16,16]):
