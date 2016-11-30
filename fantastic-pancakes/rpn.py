@@ -39,19 +39,22 @@ def Rpn(features, img_w, img_h, feature_w, feature_h, train=False, namespace="rp
             layer3x3 = createConvLayer(features, "rpn_conv/3x3")
             
             # Region Proposal Network - Probabilities
-
             prevLayer = createConvLayer(layer3x3, "rpn_cls_score")
 
             # Assuming that feat_w = feat_h = 14, and that the number of anchors is 9,
-            # we have the output should be of shape (1,14,14,18).
-            # We want to reshape this for softmax.  Reshape to (1,14,14*9,2),
-            # which simply is (1, 14, 126, 2), and softmax on the last dimension.
-            prevLayer = tf.reshape(prevLayer, (1,feat_h, feat_w * num_anchors, 2),
-                    name="rpn_cls_score_reshape")
-            
+            # we have the output should be of shape (9,14,14,2).
+
+            # However,a tf.nn.conv2d cannot create batches out of thin air.  Hence, the
+            # rpn_cls_score should create a (1, 14, 14, 9*2) instead, which we reshape to
+            # (1, 14, 14, 9, 2), transpose to (9, 14, 14, 2, 1), then tf.squeeze the last
+            # dimension out to arrive at the desired wonderful shape of (9, 14, 14, 2)
+
+            prevLayer = tf.reshape(prevLayer, (1, 14, 14, 9, 2))
+            prevLayer = tf.transpose(prevLayer, (4, 1, 2, 3, 0))
+            prevLayer = tf.squeeze(prevLayer, axis=4)
+
             # The dimension on which softmax is performed is automatically the last one
             prevLayer = tf.nn.softmax(prevLayer, name="rpn_cls_prob")
-            rpnProb = tf.reshape(prevLayer, (1,feat_h, feat_w, num_anchors*2))
             
             # Region Proposal Network - Bounding Box Proposal Regression
             rpnBboxPred = tf.createConvLayer(layer3x3, "rpn_bbox_pred")
@@ -71,10 +74,9 @@ def Rpn(features, img_w, img_h, feature_w, feature_h, train=False, namespace="rp
                             )
             return out
 
-def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep, \
-					scores, bbox_regressions, feature_h, feature_w, img_w, img_h, \
-					minimum_dim \
-					):
+def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep, 
+		    scores, bbox_regressions, feature_h, feature_w, img_w, img_h, 
+		    minimum_dim ):
 	""" 
 	Propose the actual regions given outputs of previous conv layers
 
@@ -113,7 +115,7 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep, \
         A tuple consisting of...
         A tf.Tensor object of rank two with shape (num_rois, 4), the second dimension having the
         structure (x0, y0, x1, y1)
-        And, A tf.Tensor object of rank one with shape (num_rois containing scores
+        And, A tf.Tensor object of rank one with shape (num_rois) containing scores
 
 	"""
 	
@@ -127,19 +129,17 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep, \
 
 	p_anchors, p_scores = prunedScoresAndAnchors(clippedAnchors, scores, minimum_dim)  
 
-        # Depending on how we are doing this score ranking, we might use either the yes score
-        # or the no score...
-        # Assuming the yes score is the first part of it (not even sure this is how it works)
-        yes_scores, _ = tf.unstack(p_scores, 3)
+        # Assuming the foreground score is the second one,
+        _, fg_scores = tf.unstack(p_scores, 3)
 
-	top_scores, top_score_indices = tf.nn.top_k(yes_scores, k=pre_nms_keep)
+	top_scores, top_score_indices = tf.nn.top_k(fg_scores, k=pre_nms_keep)
 	top_anchors = tf.gather_nd(p_anchors, top_score_indices)
             
 	# Changing shape into form [num_boxes,4] as required by tf.image.non_max_suppression
-	top_anchors_reshaped = tf.reshape((-1,4))
+	top_anchors_reshaped = tf.reshape(top_anchors,(-1,4))
 
         # Might not need to reshape scores, might need to reshape scores.
-        top_scores_reshaped = tf.reshape((-1))
+        top_scores_reshaped = tf.reshape(top_scores, (-1))
 
 	post_nms_indices = tf.image.non_max_suppression(top_anchors_reshaped, top_scores_reshaped,
 							post_nms_keep, iou_threshold=iou_threshold)
