@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-def setUp(pooled_regions):
+def setUp(pooled_regions, namespace="rcnn"):
     """
     This function takes in the roi_pooling_layer output and spits out a bounding box regression and classification score.
 
@@ -25,31 +25,32 @@ def setUp(pooled_regions):
     # somewhere else
 
     last_dimension = 14*14*512
+    with tf.variable_scope(namespace) as model_scope:
+        model_scope.reuse_variables()
+        with tf.variable_scope("fc6") as scope:
+            flattened_in = tf.reshape(pooled_regions, (-1, last_dimension))
+            prevLayer = tf.nn.bias_add(tf.matmul(flattened_in, 
+                            tf.get_variable("Weights")), tf.get_variable("Bias"))
+        
+        prevLayer = tf.nn.relu(prevLayer, "relu6")
 
-    with tf.variable_scope("fc6") as scope:
-        flattened_in = tf.reshape(pooled_regions, (-1, last_dimension))
-        prevLayer = tf.nn.bias_add(tf.matmul(flattened_in, 
+        with tf.variable_scope("fc7") as scope:
+            prevLayer = tf.nn.bias_add(tf.matmul(prevLayer,
+                            tf.get_variable("Weights")), tf.get_variable("Bias"))
+
+        prevLayer = tf.nn.relu(prevLayer, "relu7")
+
+        # Produce classification probabilities
+        with tf.variable_scope("cls_score") as scope:
+            scoreLayer = tf.nn.bias_add(tf.matmul(prevLayer,
+                            tf.get_variable("Weights")), tf.get_variable("Bias"))
+        
+        probLayer = tf.nn.softmax(scoreLayer, "cls_prob")
+
+        # Produce regressions (note these are with respect to the individual regions, so the
+        # actual regions in the image resulting from these is yet to be calculated
+        with tf.variable_scope("bbox_pred") as scope:
+            bboxPred = tf.nn.bias_add(tf.matmul(prevLayer,
                         tf.get_variable("Weights")), tf.get_variable("Bias"))
-    
-    prevLayer = tf.nn.relu(prevLayer, "relu6")
-
-    with tf.variable_scope("fc7") as scope:
-        prevLayer = tf.nn.bias_add(tf.matmul(prevLayer,
-                        tf.get_variable("Weights")), tf.get_variable("Bias"))
-
-    prevLayer = tf.nn.relu(prevLayer, "relu7")
-
-    # Produce classification probabilities
-    with tf.variable_scope("cls_score") as scope:
-        scoreLayer = tf.nn.bias_add(tf.matmul(prevLayer,
-                        tf.get_variable("Weights")), tf.get_variable("Bias"))
-    
-    probLayer = tf.nn.softmax(scoreLayer, "cls_prob")
-
-    # Produce regressions (note these are with respect to the individual regions, so the
-    # actual regions in the image resulting from these is yet to be calculated
-    with tf.variable_scope("bbox_pred") as scope:
-        bboxPred = tf.nn.bias_add(tf.matmul(prevLayer,
-                    tf.get_variable("Weights")), tf.get_variable("Bias"))
 
     return scoreLayer, bboxPred
