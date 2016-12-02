@@ -18,11 +18,12 @@ DEF_PROTOTXT_DL = "https://gist.githubusercontent.com/ksimonyan/3785162f95cd2d5f
 
 DEF_FRCNN_DL = "https://people.eecs.berkeley.edu/~rbg/faster-rcnn-data/faster_rcnn_models.tgz"
 DEF_FRCNN_PATH = add_root("models/faster_rcnn_mdoels.tgz")
-DEF_FRCNN_CAFFFEMODEL_PATH = add_root( "models/Faster_R_CNN.caffemodel")
-DEF_FRCNN_PROTOTXT_PATH = add_root("models/Faster_R_CNN.prototxt")
+DEF_FRCNN_CAFFFEMODEL_PATH = add_root( 
+        "models/faster_rcnn_models/VGG16_faster_rcnn_final.caffemodel")
+DEF_FRCNN_PROTOTXT_PATH = add_root("models/VGG16_faster_rcnn_final.prototxt")
 
-DEF_FRCNN_WEIGHTS_PATH = add_root("models/Faster_R_CNN_weights.npz")
-DEF_FRCNN_BIASES_PATH = add_root("models/Faster_R_CNN_biases.npz")
+DEF_FRCNN_WEIGHTS_PATH = add_root("model/VGG16_faster_rcnn_weights.npz")
+DEF_FRCNN_BIASES_PATH = add_root("model/VGG16_faster_rcnn_biases.npz")
 
 DEF_TEST_IMAGE_PATHS = [add_root( "test/images/Cat.jpg"),
                         add_root( "test/images/EnglishSetter.jpg"),
