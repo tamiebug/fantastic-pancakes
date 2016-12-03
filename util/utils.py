@@ -168,12 +168,8 @@ def isolatedFunctionRun(func, textSuppress, *args, **kwargs):
     Runs the function func, with arguments *args and **kwargs, in its own thread.
     If textSupress = True, all console output will be redirected to os.devnull
     """
-    # Openoth, caffemodelPlif "fc" in name:
-            # Since elif, not "fc6"			
-            # Tensorflow order	: [in_channels, out_channels]
-            # Caffe order		: [out_channels, in_channels]
-            caffeVggWeights[name] = caffeVggWeights[name].transpose((1,0))
-          two os.devnull
+    # Open two os.devnull
+
     nulls = [os.open(os.devnull, os.O_RDWR) , os.open(os.devnull, os.O_RDWR)]
     if textSuppress:
         old = os.dup(1), os.dup(2)
