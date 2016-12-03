@@ -1,7 +1,7 @@
 import numpy
 import caffe
 import tensorflow
-import settings as s
+from . import settings as s
 
 from urllib import urlretrieve
 import threading

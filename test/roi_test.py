@@ -3,8 +3,8 @@ import numpy as np
 
 import unittest
 
-from testUtils import eval_cpu, eval_gpu
-from layers.custom_layers import roi_pooling_layer
+from .testUtils import eval_cpu, eval_gpu
+from ..layers.custom_layers import roi_pooling_layer
 
 def createDiagFeatures(width=16, height=16, channels=1, dtype=np.float32,
         asNumpyArray=False, inverted=(False,False,False)):

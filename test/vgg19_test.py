@@ -2,9 +2,9 @@ import numpy as np
 import caffe
 import tensorflow as tf
 
-import utils
-import vgg19
-import settings as s
+from ..utils import utils
+from ..networks import vgg19
+from ..utils import settings as s
 
 import threading
 import os

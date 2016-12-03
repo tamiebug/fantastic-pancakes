@@ -5,7 +5,7 @@ import tensorflow as tf
 
 from itertools import izip
 
-import rpn
+from ..networks import rpn
 
 class generateAnchorsTest(unittest.TestCase):
 
