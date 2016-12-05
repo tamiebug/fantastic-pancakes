@@ -7,10 +7,11 @@ using namespace tensorflow;
 
 REGISTER_OP("RoiPooler")
     .Input("input_matrix : float")
+	.Input("image_attr : float")
 	.Input("proposal_regions : float")
 	.Attr("pooled_height : int")
 	.Attr("pooled_width : int")
-	.Attr("feature_stride : int")
+	.Attr("feature_stride : float")
 	.Output("output_matrix: float")
 	.Output("output_argmax : int32")
 	.Output("output_diag : float");
@@ -32,7 +33,9 @@ public:
 		{
 		// Providing pointers to inputs/outputs
 		const Tensor *input_layer = &(context->input(0));
-		const Tensor *proposal_regions = &(context->input(1));
+		const Tensor *image_attr = &(context->input(1));
+		const Tensor *proposal_regions = &(context->input(2));
+
 		Tensor *output_tensor = NULL;
 		Tensor *output_argmax = NULL;
 		Tensor *output_diag   = NULL;
@@ -48,6 +51,15 @@ public:
 		const int feat_w = input_layer->dim_size(1);
 		const int feat_h = input_layer->dim_size(0);
 		const int feat_c = input_layer->dim_size(2);
+		// The last dimension of image_attr has the scaling factor we want
+		const int scale_factor = (image_attr->template tensor<float,1>())(2);
+
+		/* Images are resized before being fed into the network.  Hence, the true
+		 * feature stride is the inherent feature stride of the underlying classification
+		 * network (16 for vgg16/19 for example) times the rescaling done to the image
+		 * before being input into that network
+		 */
+		const float true_feat_stride = feat_stride * scale_factor;
 
 		// With these constants established, we can allocate buffers for the outputs
 		TensorShape output_tensor_shape = {num_rois, pooled_h, pooled_w, feat_c};
@@ -102,13 +114,13 @@ public:
 		for( int n=0 ; n < num_rois ; n++ ) {
 		    // Region of interest translated to feature input
 			const int roi_w_feat_start = static_cast<int>(
-							std::floor(region_props(n,0)/feat_stride + .5));
+							std::floor(region_props(n,0)/true_feat_stride + .5));
 			const int roi_h_feat_start = static_cast<int>(
-							std::floor(region_props(n,1)/feat_stride + .5));
+							std::floor(region_props(n,1)/true_feat_stride + .5));
 			const int roi_w_feat_end = static_cast<int>(
-							std::ceil(region_props(n,2)/feat_stride + .5));
+							std::ceil(region_props(n,2)/true_feat_stride + .5));
 			const int roi_h_feat_end = static_cast<int>(
-							std::ceil(region_props(n,3)/feat_stride + .5));
+							std::ceil(region_props(n,3)/true_feat_stride + .5));
 			// pw, ph are individual elements of pooled output 
 			const float pw_binsize = (roi_w_feat_end - roi_w_feat_start)/
 					static_cast<float>(pooled_w);

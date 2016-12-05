@@ -4,29 +4,29 @@ import utils.settings as s
 import loadNetVars
 
 
-def Rpn(features, img_h, img_w, feature_h, feature_w, img_scaling, train=False, namespace="rpn"):
+def Rpn(features, image_attr,  feature_h, feature_w, train=False, namespace="rpn"):
     """ Region proposal network.  Proposes regions to later be pooled and classified/regressed
 
     Inputs:
-    features    - a tf.Tensor object of rank 4, dimensions (batch, height, width, channel),
+    features    - A tf.Tensor object of rank 4, dimensions (batch, height, width, channel),
         since this is the standard tensorflow order.
-    img_w       - This network currently does not support variable image sizes.  img_w is the
-        width of the input images to the base network
-    img_h       - same as above, but the height instead of the width
+
+    image_attr  - A tf.Tensor object of rank 1, with values [img_h, img_w, scaling_factor], 
+        where these values are described below:
+        img_w           - This network currently does not support variable image sizes.  img_w 
+        is the width of the input images to the base network
+        img_h           - Same as above, but the height instead of the width.
+        scaling_factor  - An input to the base vgg16 network is scaled such that it's as large 
+            as possible with shortest side less than 600 pixels and longest side less than 100 
+            pixels, both inclusive.  scaling_factor is the scaling factor used to effect this
+            transformation.
     feature_w   - Width of the feature output of the base classification network.  It should be
         the case that img_w/feature_w = s.DEF_FEATURE_STRIDE
     feature_h   - Height of the feature output of the base classification network.
-    img_scaling - An input to the base vgg16 network is scaled such that it's as large as possible
-                    with shortest side less than 600 pixels and longest side less than 100 pixels,
-                    both inclusive.  input_scaling is the scaling factor used to effect this
-                    transformation.
-
-    Output:
+        Output:
         A tf.tensor object of rank 2 with dimensions (num_rois, 4), where the second dimension
         is of the form {x0, y0, x1, y1}
     """
-
-    num_anchors = 9
 
     def createConvLayer(bottom, name, stride=[1, 1, 1, 1]):
         # Creates a convolutional Tensorflow layer given the name
@@ -69,7 +69,7 @@ def Rpn(features, img_h, img_w, feature_h, feature_w, img_scaling, train=False, 
         rpnBboxPred = tf.createConvLayer(layer3x3, "rpn_bbox_pred")
 
         # call the proposal layer here
-        out = proposalLayer(s.DEF_FEATURE_STRIDE * img_scaling,
+        out = proposalLayer(s.DEF_FEATURE_STRIDE,
                             s.DEF_IOU_THRESHOLD,
                             s.DEF_PRE_NMS_KEEP,
                             s.DEF_POST_NMS_KEEP,
@@ -77,22 +77,21 @@ def Rpn(features, img_h, img_w, feature_h, feature_w, img_scaling, train=False, 
                             rpnBboxPred,
                             feature_h,
                             feature_w,
-                            img_w,
-                            img_h,
+                            img_attr,
                             s.DEF_MIN_PROPOSAL_DIMS
                             )
         return out
 
 
 def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
-                  scores, bbox_regressions, feature_h, feature_w, img_w, img_h,
+                  scores, bbox_regressions, feature_h, feature_w, img_attr,
                   minimum_dim):
     """ 
     Propose the actual regions given outputs of previous conv layers
 
     Arguments:
-    feature_stride 	-- Ratio of number of features in the last layer of the base
-    convolutional layer to the number of pixels in the image.
+    feature_stride      -- Ratio of number of features in the last layer of the base
+    convolutional layer to the number of pixels in the input.
 
     iou_threshold	-- Ratio determining the IoU (Intersection over Union) radius
     to be used for non-maximum suppression
@@ -104,7 +103,7 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
     post_nms_keep	-- NMS reduces the number of regions greatly.  Number of regions
     to keep after performing NMS (non-maximum suppression).
 
-    bbox_regressions-- List of regressions for each initial anchor at each position
+    bbox_regressions    -- List of regressions for each initial anchor at each position
     in the feature map input to the region proposal network. (is a tf.Variable object)
 
     scores			-- List of scores ranking the aformentioned regions after regressions.
@@ -114,9 +113,11 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
 
     feature_w		-- Width of feature map
 
-    img_w			-- Input layer image width (in pixels)
-
-    img_h			-- Input layer image height (in pixels)
+    img_attr            -- tf.Tensor object containing the following values in order
+        img_w		-- Input layer image width (in pixels)
+        img_h		-- Input layer image height (in pixels)
+        scale_factor    -- Factor by which original image scaled before being fed into base
+                            classification layer
 
     minimum_dim		-- Smallest allowed anchor side dimension.
 
@@ -130,11 +131,11 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
 
     baseAnchors = generateAnchors(ratios=[2, 1, .5])
 
-    shiftedAnchors = generateShiftedAnchors(baseAnchors, feature_h, feature_w)
+    shiftedAnchors = generateShiftedAnchors(baseAnchors, feature_h, img_attr)
 
     regressedAnchors = regressAnchcors(shiftedAnchors, bbox_regressions)
 
-    clippedAnchors = clipRegions(regressedAnchors, img_h, img_w)
+    clippedAnchors = clipRegions(regressedAnchors, img_attr)
 
     p_anchors, p_scores = prunedScoresAndAnchors(
         clippedAnchors, scores, minimum_dim)
@@ -155,8 +156,9 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
     post_nms_indices = tf.image.non_max_suppression(top_anchors_reshaped, top_scores_reshaped,
                                                     post_nms_keep, iou_threshold=iou_threshold)
 
-    final_anchors = tf.gather_nd(top_anchors_reshaped, post_nms_indices)
-    final_scores = tf.gather_nd(top_scores_reshaped, post_nms_indices)
+    final_anchors = tf.gather_nd(top_anchors_reshaped, post_nms_indices, name='proposal_regions')
+    final_scores = tf.gather_nd(top_scores_reshaped, post_nms_indices, 
+                                    name='proposal_region_scores')
 
     return final_anchors, final_scores
 
@@ -184,7 +186,7 @@ def prunedScoresAndAnchors(anchors, scores, minimum_dim):
     return anchors_gathered, scores_gathered
 
 
-def clipRegions(anchors, img_h, img_w):
+def clipRegions(anchors, img_attr):
     """ Clip anchors so that all lie entirely within image """
 
     # Input anchors will be of shape
@@ -192,8 +194,9 @@ def clipRegions(anchors, img_h, img_w):
     x1, y1, x2, y2 = tf.unstack(anchors, 3)
 
     zero = tf.constant([0.])
-    max_x = tf.constant([img_w])
-    max_y = tf.constant([img_h])
+    # img_attr = (img_h, img_w, scaling_factor)
+    max_x = tf.matmul(tf.gather_nd(img_attr, [1]), tf.constant(feature_stride))
+    max_y = tf.matmul(tf.gather_nd(img_attr, [0]), tf.constant(feature_stride))
 
     x1_clipped = tf.minimum(tf.maximum(zero, x1), max_x)
     x2_clipped = tf.minimum(tf.maximum(zero, x2), max_x)
@@ -205,8 +208,7 @@ def clipRegions(anchors, img_h, img_w):
 
     return retVal
 
-
-def generateShiftedAnchors(anchors, feature_h, feature_w):
+def generateShiftedAnchors(anchors, feature_h, feature_w, feature_stride, image_attr):
     """ Generate shifted anchors to be regressed into the final RPN output
 
     A score is created for every anchor at each feature.  Using feature_stride,
@@ -216,18 +218,24 @@ def generateShiftedAnchors(anchors, feature_h, feature_w):
     feature_w * feature_h * len(anchors) anchors.
     """
 
-    x_locations = range(0, feature_w) * feature_stride
-    y_locations = range(0, feature_h) * feature_stride
+    x_locations = range(0, feature_w)
+    y_locations = range(0, feature_h)
 
     shifted_anchors = np.zeros((len(anchors), feature_h, feature_w, 4))
     for x in x_locations:
         for y in y_locations:
             for i, anchor in enumerate(anchors):
-                shifted_anchors[i, y, x, :] = \
-                    [np.ceil(anchor[0] + x - 0.5), np.ceil(anchor[1] + y - 0.5),
-                     np.ceil(anchor[2] + x - 0.5), np.ceil(anchor[3] + y - 0.5)]
+                anchor_shifts[i, y, x, :] = [x,y,x,y]
     # Last dimension has form {x0, y0, x1, y1}
-    return shifted_anchors
+
+    anchor_shifts = tf.constant(anchor_shifts)
+
+    #anchor_shifts *= scaling_factor
+    anchor_shifts = tf.matmul(anchor_shifts, tf.gather_nd(image_attr, [2]))
+
+    anchor_shifts = tf.matmul(anchor_shifts, tf.constant(feature_stride))
+    new_anchors = tf.add(tf.constant(anchors), anchor_shifts)
+    return new_anchors
 
 
 def regressAnchors(anchors, bbox_regression):
@@ -246,8 +254,8 @@ def regressAnchors(anchors, bbox_regression):
     # (Actually, we're going to assume that the regressions are ALSO in the form
     # (numBaseAnchors, feat_h, feat_w, 4) !  This can be enforced at another stage.
 
-    x1, y1, x2, y2 = tf.unstack(reshapedAnchors, 3)
-    dx, dy, dw, dh = tf.unstack(reshapedBbox_regs, 3)
+    x1, y1, x2, y2 = tf.unstack(anchors, 3)
+    dx, dy, dw, dh = tf.unstack(bbox_regression, 3)
 
     # We must get the anchors into the same width/height x/y format as the
     # bbox_regressions
