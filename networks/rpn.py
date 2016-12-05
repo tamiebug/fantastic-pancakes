@@ -4,7 +4,7 @@ import utils.settings as s
 import loadNetVars
 
 
-def Rpn(features, img_w, img_h, feature_w, feature_h, train=False, namespace="rpn"):
+def Rpn(features, img_h, img_w, feature_h, feature_w, img_scaling, train=False, namespace="rpn"):
     """ Region proposal network.  Proposes regions to later be pooled and classified/regressed
 
     Inputs:
@@ -16,6 +16,10 @@ def Rpn(features, img_w, img_h, feature_w, feature_h, train=False, namespace="rp
     feature_w   - Width of the feature output of the base classification network.  It should be
         the case that img_w/feature_w = s.DEF_FEATURE_STRIDE
     feature_h   - Height of the feature output of the base classification network.
+    img_scaling - An input to the base vgg16 network is scaled such that it's as large as possible
+                    with shortest side less than 600 pixels and longest side less than 100 pixels,
+                    both inclusive.  input_scaling is the scaling factor used to effect this
+                    transformation.
 
     Output:
         A tf.tensor object of rank 2 with dimensions (num_rois, 4), where the second dimension
@@ -53,7 +57,7 @@ def Rpn(features, img_w, img_h, feature_w, feature_h, train=False, namespace="rp
         # dimension out to arrive at the desired wonderful shape of (9, 14, 14,
         # 2)
 
-        prevLayer = tf.reshape(prevLayer, (1, 14, 14, 9, 2))
+        prevLayer = tf.reshape(prevLayer, (1, feature_h, feature_w, 9, 2))
         prevLayer = tf.transpose(prevLayer, (4, 1, 2, 3, 0))
         prevLayer = tf.squeeze(prevLayer, axis=4)
 
@@ -65,7 +69,7 @@ def Rpn(features, img_w, img_h, feature_w, feature_h, train=False, namespace="rp
         rpnBboxPred = tf.createConvLayer(layer3x3, "rpn_bbox_pred")
 
         # call the proposal layer here
-        out = proposalLayer(s.DEF_FEATURE_STRIDE,
+        out = proposalLayer(s.DEF_FEATURE_STRIDE * img_scaling,
                             s.DEF_IOU_THRESHOLD,
                             s.DEF_PRE_NMS_KEEP,
                             s.DEF_POST_NMS_KEEP,
@@ -88,8 +92,7 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
 
     Arguments:
     feature_stride 	-- Ratio of number of features in the last layer of the base
-    convolutional layer to the number of pixels in the image input layer.  Equal
-    to 16 for VGGNet and ZF
+    convolutional layer to the number of pixels in the image.
 
     iou_threshold	-- Ratio determining the IoU (Intersection over Union) radius
     to be used for non-maximum suppression
@@ -221,8 +224,8 @@ def generateShiftedAnchors(anchors, feature_h, feature_w):
         for y in y_locations:
             for i, anchor in enumerate(anchors):
                 shifted_anchors[i, y, x, :] = \
-                    [anchor[0] + x, anchor[1] + y,
-                     anchor[2] + x, anchor[3] + y]
+                    [np.ceil(anchor[0] + x - 0.5), np.ceil(anchor[1] + y - 0.5),
+                     np.ceil(anchor[2] + x - 0.5), np.ceil(anchor[3] + y - 0.5)]
     # Last dimension has form {x0, y0, x1, y1}
     return shifted_anchors
 

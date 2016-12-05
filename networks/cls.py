@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
-def setUp(pooled_regions, namespace="rcnn"):
+def setUp(pooled_regions, pooled_h, pooled_w, feat_channels, namespace="rcnn"):
     """
     This function takes in the roi_pooling_layer output and spits out a bounding box regression and classification score.
 
@@ -20,11 +20,7 @@ def setUp(pooled_regions, namespace="rcnn"):
             four floats, so this output will be an np.array of shape (num_regions, 21, 4)
     """
 
-    # This is just hack to get this to work for now, but
-    # The values for pooled_h, pooled_w, num_channels should be obtained
-    # somewhere else
-
-    last_dimension = 14*14*512
+    last_dimension = pooled_h * pooled_w * feat_channels
     with tf.variable_scope(namespace) as model_scope:
         model_scope.reuse_variables()
         with tf.variable_scope("fc6") as scope:
