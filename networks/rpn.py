@@ -1,10 +1,10 @@
 import numpy as np
 import tensorflow as tf
-import utils.settings as s
-import loadNetVars
+from ..utils import settings as s
+from . import loadNetVars
 
 
-def Rpn(features, image_attr,  feature_h, feature_w, train=False, namespace="rpn"):
+def Rpn(features, image_attr, train=False, namespace="rpn"):
     """ Region proposal network.  Proposes regions to later be pooled and classified/regressed
 
     Inputs:
@@ -20,9 +20,6 @@ def Rpn(features, image_attr,  feature_h, feature_w, train=False, namespace="rpn
             as possible with shortest side less than 600 pixels and longest side less than 100 
             pixels, both inclusive.  scaling_factor is the scaling factor used to effect this
             transformation.
-    feature_w   - Width of the feature output of the base classification network.  It should be
-        the case that img_w/feature_w = s.DEF_FEATURE_STRIDE
-    feature_h   - Height of the feature output of the base classification network.
         Output:
         A tf.tensor object of rank 2 with dimensions (num_rois, 4), where the second dimension
         is of the form {x0, y0, x1, y1}
@@ -56,6 +53,9 @@ def Rpn(features, image_attr,  feature_h, feature_w, train=False, namespace="rpn
         # (1, 14, 14, 9, 2), transpose to (9, 14, 14, 2, 1), then tf.squeeze the last
         # dimension out to arrive at the desired wonderful shape of (9, 14, 14,
         # 2)
+
+        feature_h = tf.gather_nd(tf.shape(features), [1])
+        feature_w = tf.gather_nd(tf.shape(features), [2])
 
         prevLayer = tf.reshape(prevLayer, (1, feature_h, feature_w, 9, 2))
         prevLayer = tf.transpose(prevLayer, (4, 1, 2, 3, 0))
@@ -131,7 +131,7 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
 
     baseAnchors = generateAnchors(ratios=[2, 1, .5])
 
-    shiftedAnchors = generateShiftedAnchors(baseAnchors, feature_h, img_attr)
+    shiftedAnchors = generateShiftedAnchors(baseAnchors, feature_h, feature_w, img_attr)
 
     regressedAnchors = regressAnchcors(shiftedAnchors, bbox_regressions)
 
@@ -217,25 +217,26 @@ def generateShiftedAnchors(anchors, feature_h, feature_w, feature_stride, image_
     input anchors.  We must shift these anchors to each x,y location, for a total of
     feature_w * feature_h * len(anchors) anchors.
     """
+    
+    scaling_factor = tf.gather_nd(image_attr, [2])
+    
+    x_locations = tf.range(0, feature_w)
+    y_locations = tf.range(0, feature_h)
 
-    x_locations = range(0, feature_w)
-    y_locations = range(0, feature_h)
+    x_zeros = tf.zeros((feature_w))
+    y_zeros = tf.zeros((feature_h))
 
-    shifted_anchors = np.zeros((len(anchors), feature_h, feature_w, 4))
-    for x in x_locations:
-        for y in y_locations:
-            for i, anchor in enumerate(anchors):
-                anchor_shifts[i, y, x, :] = [x,y,x,y]
-    # Last dimension has form {x0, y0, x1, y1}
+    x_stack = tf.stack([x_locations, x_zeros, x_locations, x_zeros], 1)
+    y_stack = tf.stack([y_zeros, y_locations, y_zeros, y_locations], 1)
 
-    anchor_shifts = tf.constant(anchor_shifts)
+    x_reshaped_stack = tf.reshape(x_stack, (1, 1, feature_w, 4))
+    y_reshaped_stack = tf.reshape(y_stack, (1, feature_h, 1, 4))
 
-    #anchor_shifts *= scaling_factor
-    anchor_shifts = tf.matmul(anchor_shifts, tf.gather_nd(image_attr, [2]))
-
-    anchor_shifts = tf.matmul(anchor_shifts, tf.constant(feature_stride))
-    new_anchors = tf.add(tf.constant(anchors), anchor_shifts)
-    return new_anchors
+    # I <3 broadcasting
+    raw_anchor_shifts = tf.add(x_reshaped_stack, y_reshaped_stack)
+    less_raw_anchor_shifts = tf.matmul(raw_anchor_shifts, scaling_factor)
+    anchor_shifts = tf.matmul(less_raw_anchor_shifts, tf.constant(feature_stride))
+    return anchor_shifts + tf.constant(anchors)
 
 
 def regressAnchors(anchors, bbox_regression):
