@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-from ..utils import settings as s
+from util import settings as s
 from . import loadNetVars
 
 
@@ -37,7 +37,7 @@ def Rpn(features, image_attr, train=False, namespace="rpn"):
             prevLayer = tf.nn.bias_add(prevLayer, tf.get_variable("Bias"))
         return prevLayer
 
-    with tf.variable_scope(self.namespace) as model_scope:
+    with tf.variable_scope(namespace) as model_scope:
         model_scope.reuse_variables()
 
         layer3x3 = createConvLayer(features, "rpn_conv/3x3")
@@ -59,25 +59,32 @@ def Rpn(features, image_attr, train=False, namespace="rpn"):
 
         prevLayer = tf.reshape(prevLayer, (1, feature_h, feature_w, 9, 2))
         prevLayer = tf.transpose(prevLayer, (4, 1, 2, 3, 0))
-        prevLayer = tf.squeeze(prevLayer, axis=4)
+        prevLayer = tf.squeeze(prevLayer)
 
         # The dimension on which softmax is performed is automatically the last
         # one
-        prevLayer = tf.nn.softmax(prevLayer, name="rpn_cls_prob")
+        rpnScores  = tf.nn.softmax(prevLayer, name="rpn_cls_prob")
 
         # Region Proposal Network - Bounding Box Proposal Regression
-        rpnBboxPred = tf.createConvLayer(layer3x3, "rpn_bbox_pred")
+        rpnBboxPred = createConvLayer(layer3x3, "rpn_bbox_pred")
+        
+        # We want to resehape rpnBboxPred just like we did the scores.
+        # Only difference is that we reshape to (9,14,14,4) instead of
+        # (9,14,14,2) (in the case of feat_h=feat_w=14)
 
-        # call the proposal layer here
+        prevLayer = tf.reshape(rpnBboxPred, (1, feature_h, feature_w, 9, 4))
+        prevLayer = tf.transpose(prevLayer, (4, 1, 2, 3, 0))
+        rpnBboxPred = tf.squeeze(prevLayer)
+
         out = proposalLayer(s.DEF_FEATURE_STRIDE,
                             s.DEF_IOU_THRESHOLD,
                             s.DEF_PRE_NMS_KEEP,
                             s.DEF_POST_NMS_KEEP,
-                            rpnProb,
+                            rpnScores,
                             rpnBboxPred,
                             feature_h,
                             feature_w,
-                            img_attr,
+                            image_attr,
                             s.DEF_MIN_PROPOSAL_DIMS
                             )
         return out
@@ -131,17 +138,18 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
 
     baseAnchors = generateAnchors(ratios=[2, 1, .5])
 
-    shiftedAnchors = generateShiftedAnchors(baseAnchors, feature_h, feature_w, img_attr)
+    shiftedAnchors = generateShiftedAnchors(baseAnchors, feature_h, feature_w,
+            feature_stride, img_attr)
 
-    regressedAnchors = regressAnchcors(shiftedAnchors, bbox_regressions)
+    regressedAnchors = regressAnchors(shiftedAnchors, bbox_regressions)
 
-    clippedAnchors = clipRegions(regressedAnchors, img_attr)
+    clippedAnchors = clipRegions(regressedAnchors, img_attr, feature_stride)
 
     p_anchors, p_scores = prunedScoresAndAnchors(
         clippedAnchors, scores, minimum_dim)
 
     # Assuming the foreground score is the second one,
-    _, fg_scores = tf.unstack(p_scores, 3)
+    _, fg_scores = tf.unpack(p_scores, 3)
 
     top_scores, top_score_indices = tf.nn.top_k(fg_scores, k=pre_nms_keep)
     top_anchors = tf.gather_nd(p_anchors, top_score_indices)
@@ -186,12 +194,12 @@ def prunedScoresAndAnchors(anchors, scores, minimum_dim):
     return anchors_gathered, scores_gathered
 
 
-def clipRegions(anchors, img_attr):
+def clipRegions(anchors, img_attr, feature_stride):
     """ Clip anchors so that all lie entirely within image """
 
     # Input anchors will be of shape
     # (numBaseAnchors, feature_h, feature_w, 4)
-    x1, y1, x2, y2 = tf.unstack(anchors, 3)
+    x1, y1, x2, y2 = tf.unpack(anchors,num=4,axis=3)
 
     zero = tf.constant([0.])
     # img_attr = (img_h, img_w, scaling_factor)
@@ -217,25 +225,28 @@ def generateShiftedAnchors(anchors, feature_h, feature_w, feature_stride, image_
     input anchors.  We must shift these anchors to each x,y location, for a total of
     feature_w * feature_h * len(anchors) anchors.
     """
-    
+   
     scaling_factor = tf.gather_nd(image_attr, [2])
-    
-    x_locations = tf.range(0, feature_w)
-    y_locations = tf.range(0, feature_h)
+    feature_stride = tf.to_float(tf.constant(feature_stride))
+    # I need to reinterpret these as floats
 
-    x_zeros = tf.zeros((feature_w))
-    y_zeros = tf.zeros((feature_h))
+    x_locations = tf.to_float(tf.range(0, feature_w))
+    y_locations = tf.to_float(tf.range(0, feature_h))
 
-    x_stack = tf.stack([x_locations, x_zeros, x_locations, x_zeros], 1)
-    y_stack = tf.stack([y_zeros, y_locations, y_zeros, y_locations], 1)
+    x_zeros = tf.zeros([feature_w])
+    y_zeros = tf.zeros([feature_h])
+
+    x_stack = tf.pack([x_locations, x_zeros, x_locations, x_zeros], 1)
+    y_stack = tf.pack([y_zeros, y_locations, y_zeros, y_locations], 1)
 
     x_reshaped_stack = tf.reshape(x_stack, (1, 1, feature_w, 4))
     y_reshaped_stack = tf.reshape(y_stack, (1, feature_h, 1, 4))
 
     # I <3 broadcasting
     raw_anchor_shifts = tf.add(x_reshaped_stack, y_reshaped_stack)
-    less_raw_anchor_shifts = tf.matmul(raw_anchor_shifts, scaling_factor)
-    anchor_shifts = tf.matmul(less_raw_anchor_shifts, tf.constant(feature_stride))
+    less_raw_anchor_shifts = scaling_factor * raw_anchor_shifts
+
+    anchor_shifts = feature_stride * less_raw_anchor_shifts
     return anchor_shifts + tf.constant(anchors)
 
 
@@ -255,8 +266,8 @@ def regressAnchors(anchors, bbox_regression):
     # (Actually, we're going to assume that the regressions are ALSO in the form
     # (numBaseAnchors, feat_h, feat_w, 4) !  This can be enforced at another stage.
 
-    x1, y1, x2, y2 = tf.unstack(anchors, 3)
-    dx, dy, dw, dh = tf.unstack(bbox_regression, 3)
+    x1, y1, x2, y2 = tf.unpack(anchors,num=4, axis=3)
+    dx, dy, dw, dh = tf.unpack(bbox_regression,num=4, axis=3)
 
     # We must get the anchors into the same width/height x/y format as the
     # bbox_regressions
@@ -276,10 +287,10 @@ def regressAnchors(anchors, bbox_regression):
     h_new = tf.mul(tf.exp(dh), h)
 
     # Transform back to the original (x1,y1,x2,y2) coordinate system
-    x1_final = tf.sub(x_new, tf.mul(tf.constant([.5], w_new)))
-    y1_final = tf.sub(y_new, tf.mul(tf.constant([.5], h_new)))
-    x2_final = tf.add(x_new, tf.mul(tf.constant([.5], w_new)))
-    y2_final = tf.add(y_new, tf.mul(tf.constant([.5], h_new)))
+    x1_final = tf.sub(x_new, tf.mul(tf.constant([.5]), w_new))
+    y1_final = tf.sub(y_new, tf.mul(tf.constant([.5]), h_new))
+    x2_final = tf.add(x_new, tf.mul(tf.constant([.5]), w_new))
+    y2_final = tf.add(y_new, tf.mul(tf.constant([.5]), h_new))
 
     # Stack our anchors back up
     regressedAnchors = tf.pack([x1_final, y1_final, x2_final, y2_final], 3)

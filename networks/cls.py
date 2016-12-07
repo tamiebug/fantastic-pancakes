@@ -39,7 +39,7 @@ def setUp(pooled_regions, pooled_h, pooled_w, feat_channels, namespace="rcnn"):
         # Produce classification probabilities
         with tf.variable_scope("cls_score") as scope:
             scoreLayer = tf.nn.bias_add(tf.matmul(prevLayer,
-                            tf.get_variable("Weights")), tf.get_variable("Bias"))
+                            tf.get_variable("Weights")), tf.get_variable("Bias"), "out")
         
         probLayer = tf.nn.softmax(scoreLayer, "cls_prob")
 
@@ -47,6 +47,6 @@ def setUp(pooled_regions, pooled_h, pooled_w, feat_channels, namespace="rcnn"):
         # actual regions in the image resulting from these is yet to be calculated
         with tf.variable_scope("bbox_pred") as scope:
             bboxPred = tf.nn.bias_add(tf.matmul(prevLayer,
-                        tf.get_variable("Weights")), tf.get_variable("Bias"))
+                        tf.get_variable("Weights")), tf.get_variable("Bias"), "out")
 
     return scoreLayer, bboxPred

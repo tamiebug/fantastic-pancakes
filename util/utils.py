@@ -6,7 +6,6 @@ from . import settings as s
 from urllib import urlretrieve
 import threading
 import os
-import os.path
 import skimage.io
 import skimage.transform
 import tarfile
@@ -63,21 +62,26 @@ def downloadFasterRcnn():
     DEF_FRCNN_CAFFEMODEL_PATH path
     """
     filesExist = os.path.isfile(s.DEF_FRCNN_WEIGHTS_PATH)
-    filesExist = filesExist and os.path.isFile(s.DEF_FRCNN_BIASES_PATH)
-
+    filesExist = filesExist and os.path.isfile(s.DEF_FRCNN_BIASES_PATH)
+    
     if filesExist:
         print ("Faster RCNN files already exist.  Delete them if you wish to re-download")
-    urlretrieve(s.DEF_FRCNN_DL, s.DEF_FRCNN_PATH)
-    tar = tarfile.open(s.DEF_FRCNN_DL)
+        return;
+    #urlretrieve(s.DEF_FRCNN_DL, s.DEF_FRCNN_PATH)
+    tar = tarfile.open(s.DEF_FRCNN_PATH)
     tar.extractall()
     tar.close()
 
     # Check to make sure extraction worked
     if not os.path.isfile(s.DEF_FRCNN_CAFFEMODEL_PATH):
         print ("Extraction failed.  Check if s.DEF_FRCNN_CAFFEMODE_PATH is correct.")
+
+    print("Extracting weights from caffe into numpy")
+    fasterCoffeeMachine(prototxtPath=s.DEF_FRCNN_PROTOTXT_PATH,
+                        caffemodelPath=s.DEF_FRCNN_CAFFEMODEL_PATH)
     return
 
-def fasterCoffeeMachine(protoxtPath=s.DEF_FRCNN_PROTOTXT_PATH, caffemodelPath=s.DEF_FRCNN_CAFFEMODEL_PATH):
+def fasterCoffeeMachine(prototxtPath=s.DEF_FRCNN_PROTOTXT_PATH, caffemodelPath=s.DEF_FRCNN_CAFFEMODEL_PATH):
     """ Extract the weights and biases from a .caffemodel file and save in a npz file"""
     
     # Extract Caffe weights and biases
@@ -86,9 +90,9 @@ def fasterCoffeeMachine(protoxtPath=s.DEF_FRCNN_PROTOTXT_PATH, caffemodelPath=s.
     caffeVggBiases = { name: blobs[1].data for name, blobs in coffee.params.iteritems() }
     
     # There are a few conv layers without "conv" in name, but treated the same
-    devious_convs = ["rpn_cls_score", "rpn_bbox_pred"]
-
+    devious_convs = ["rpn_cls_score","rpn_bbox_pred"]
     for name in caffeVggWeights:
+        print("{} : {}".format(name, caffeVggWeights[name].shape))
         # As before, the conv layers are all identically processed.
         if ("conv" in name) or (name in devious_convs) :
             # Tensorflow order  : [ width, height, in_channels, out_channels ]
@@ -110,13 +114,16 @@ def fasterCoffeeMachine(protoxtPath=s.DEF_FRCNN_PROTOTXT_PATH, caffemodelPath=s.
             # Transpose the weights so that they are in the tensorflow instead of caffe order
             caffeVggWeights[name] = caffeVggWeights[name].transpose((2,3,1,0))
             caffeVggWeights[name] = caffeVggWeights[name].reshape(INPUT_SIZE, OUTPUT_SIZE)
-        elif "fc" in name:
+        elif "fc" in name or name=="bbox_pred" or name=="cls_score":
             # Since elif, not "fc6"			
             # Tensorflow order	: [in_channels, out_channels]
             # Caffe order		: [out_channels, in_channels]
             caffeVggWeights[name] = caffeVggWeights[name].transpose((1,0))
-         
-
+        else:
+            print("Warning, following layer not being saved: {}".format(name))
+    numpy.savez(s.DEF_FRCNN_WEIGHTS_PATH, **caffeVggWeights)
+    numpy.savez(s.DEF_FRCNN_BIASES_PATH, **caffeVggBiases)
+    print("Coffee successfully brewed")
 
 def coffeeMachine(prototxtPath=s.DEF_PROTOTXT_PATH, caffemodelPath=s.DEF_CAFFEMODEL_PATH):
     """

@@ -4,8 +4,6 @@ import util.settings as s
 
 def _fixModelPath(path):
     # Ensures that sloppily constructed model paths still work
-    if not path.startswits("models/"):
-        path = "models/" + path
     if not path.endswith(".npz"):
         return path + ".npz"
     else:
