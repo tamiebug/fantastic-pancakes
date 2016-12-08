@@ -28,25 +28,25 @@ def setUp(pooled_regions, pooled_h, pooled_w, feat_channels, namespace="rcnn"):
             prevLayer = tf.nn.bias_add(tf.matmul(flattened_in, 
                             tf.get_variable("Weights")), tf.get_variable("Bias"))
         
-        prevLayer = tf.nn.relu(prevLayer, "relu6")
+        prevLayer = tf.nn.relu(prevLayer, name="relu6")
 
         with tf.variable_scope("fc7") as scope:
             prevLayer = tf.nn.bias_add(tf.matmul(prevLayer,
                             tf.get_variable("Weights")), tf.get_variable("Bias"))
 
-        prevLayer = tf.nn.relu(prevLayer, "relu7")
+        prevLayer = tf.nn.relu(prevLayer, name="relu7")
 
         # Produce classification probabilities
         with tf.variable_scope("cls_score") as scope:
             scoreLayer = tf.nn.bias_add(tf.matmul(prevLayer,
-                            tf.get_variable("Weights")), tf.get_variable("Bias"), "out")
+                            tf.get_variable("Weights")), tf.get_variable("Bias"),name="out")
         
-        probLayer = tf.nn.softmax(scoreLayer, "cls_prob")
+        probLayer = tf.nn.softmax(scoreLayer, name="cls_prob")
 
         # Produce regressions (note these are with respect to the individual regions, so the
         # actual regions in the image resulting from these is yet to be calculated
         with tf.variable_scope("bbox_pred") as scope:
             bboxPred = tf.nn.bias_add(tf.matmul(prevLayer,
-                        tf.get_variable("Weights")), tf.get_variable("Bias"), "out")
+                        tf.get_variable("Weights")), tf.get_variable("Bias"), name="out")
 
-    return scoreLayer, bboxPred
+    return bboxPred, probLayer

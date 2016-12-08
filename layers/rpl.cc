@@ -11,7 +11,7 @@ REGISTER_OP("RoiPooler")
 	.Input("proposal_regions : float")
 	.Attr("pooled_height : int")
 	.Attr("pooled_width : int")
-	.Attr("feature_stride : float")
+	.Attr("feature_stride : int")
 	.Output("output_matrix: float")
 	.Output("output_argmax : int32")
 	.Output("output_diag : float");
@@ -59,7 +59,7 @@ public:
 		 * network (16 for vgg16/19 for example) times the rescaling done to the image
 		 * before being input into that network
 		 */
-		const float true_feat_stride = feat_stride * scale_factor;
+		const float true_feat_stride = float(feat_stride) * float(scale_factor);
 
 		// With these constants established, we can allocate buffers for the outputs
 		TensorShape output_tensor_shape = {num_rois, pooled_h, pooled_w, feat_c};

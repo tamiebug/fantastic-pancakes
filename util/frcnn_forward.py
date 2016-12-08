@@ -24,8 +24,8 @@ def faster_rcnn(image, image_attributes):
         rpn_scores      - tf.Tensor with objectness scores, ranking each detection's
                             likelihood to be an object.
     """
-    pooled_h = 14
-    pooled_w = 14
+    pooled_h = 7
+    pooled_w = 7
     feature_channels = 512 # Property of vgg16 network
 
     vgg16_base = Vgg19('frcnn')
@@ -43,12 +43,12 @@ def faster_rcnn(image, image_attributes):
     print("Region Proposal Network set up!")
     with tf.variable_scope('frcnn') as scope:
         pooled_regions = roi_pooling_layer(features, image_attributes, proposed_regions, 
-                                        pooled_height=pooled_h, pooled_width=pooled_w, 
-                                        name='roi_pooling_layer')[0]
+                                        pooled_h, pooled_w, 16,name='roi_pooling_layer')[0]
     print("RoI pooling set up!")
     cls_scores, bbox_reg = cls.setUp(pooled_regions, pooled_h, pooled_w, feature_channels,
                                         namespace="frcnn")
-    bboxes = rpn.regressAnchors(proposed_regions, bbox_reg)
+    
+    bboxes = rpn.regressAnchors(proposed_regions, bbox_reg, axis=1)
 
     return bboxes, cls_scores, rpn_scores
 

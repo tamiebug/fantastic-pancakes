@@ -149,7 +149,7 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
         clippedAnchors, scores, minimum_dim)
 
     # Assuming the foreground score is the second one,
-    _, fg_scores = tf.unpack(p_scores, 3)
+    _, fg_scores = tf.unpack(p_scores,num=2,axis=3)
 
     top_scores, top_score_indices = tf.nn.top_k(fg_scores, k=pre_nms_keep)
     top_anchors = tf.gather_nd(p_anchors, top_score_indices)
@@ -159,7 +159,7 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
     top_anchors_reshaped = tf.reshape(top_anchors, (-1, 4))
 
     # Might not need to reshape scores, might need to reshape scores.
-    top_scores_reshaped = tf.reshape(top_scores, (-1))
+    top_scores_reshaped = tf.reshape(top_scores, [-1])
 
     post_nms_indices = tf.image.non_max_suppression(top_anchors_reshaped, top_scores_reshaped,
                                                     post_nms_keep, iou_threshold=iou_threshold)
@@ -176,16 +176,16 @@ def prunedScoresAndAnchors(anchors, scores, minimum_dim):
 
         It is assumed that the shape of scores is (numAnchors, feat_h, feat_w, 2)
     """
-    x1, y1, x2, y2 = tf.unpack(anchors, 3)
+    x1, y1, x2, y2 = tf.unpack(anchors, num=4, axis=3)
 
     w = tf.sub(x2, x1)
     h = tf.sub(y2, y1)
 
-    width_suffices = tf.greater_equal(w, tf.constant([minimum_dim + 1]))
-    height_suffices = tf.greater_equal(h, tf.constant([minimum_dim + 1]))
+    width_suffices = tf.greater_equal(w, tf.constant([minimum_dim + 1], dtype=tf.float32))
+    height_suffices = tf.greater_equal(h, tf.constant([minimum_dim + 1], dtype=tf.float32))
 
     both_suffice = tf.logical_and(width_suffices, height_suffices)
-    indices = np.where(both_suffice)
+    indices = tf.where(both_suffice)
 
     # The actual grabbing of indexed values happens here
     anchors_gathered = tf.gather_nd(anchors, indices)
@@ -197,14 +197,15 @@ def prunedScoresAndAnchors(anchors, scores, minimum_dim):
 def clipRegions(anchors, img_attr, feature_stride):
     """ Clip anchors so that all lie entirely within image """
 
+    feature_stride = tf.constant(feature_stride, dtype=tf.float32)
     # Input anchors will be of shape
     # (numBaseAnchors, feature_h, feature_w, 4)
     x1, y1, x2, y2 = tf.unpack(anchors,num=4,axis=3)
 
     zero = tf.constant([0.])
     # img_attr = (img_h, img_w, scaling_factor)
-    max_x = tf.matmul(tf.gather_nd(img_attr, [1]), tf.constant(feature_stride))
-    max_y = tf.matmul(tf.gather_nd(img_attr, [0]), tf.constant(feature_stride))
+    max_x = [tf.gather_nd(img_attr, [1]) * feature_stride]
+    max_y = [tf.gather_nd(img_attr, [0]) * feature_stride]
 
     x1_clipped = tf.minimum(tf.maximum(zero, x1), max_x)
     x2_clipped = tf.minimum(tf.maximum(zero, x2), max_x)
@@ -227,7 +228,7 @@ def generateShiftedAnchors(anchors, feature_h, feature_w, feature_stride, image_
     """
    
     scaling_factor = tf.gather_nd(image_attr, [2])
-    feature_stride = tf.to_float(tf.constant(feature_stride))
+    feature_stride = tf.constant(feature_stride, dtype=tf.float32)
     # I need to reinterpret these as floats
 
     x_locations = tf.to_float(tf.range(0, feature_w))
@@ -250,7 +251,7 @@ def generateShiftedAnchors(anchors, feature_h, feature_w, feature_stride, image_
     return anchor_shifts + tf.constant(anchors)
 
 
-def regressAnchors(anchors, bbox_regression):
+def regressAnchors(anchors, bbox_regression, axis=3):
     """ Given preliminary bounding boxes, regress them to their final location
 
     The bounding box regressions are outputs of convolutional layers and of
@@ -266,8 +267,8 @@ def regressAnchors(anchors, bbox_regression):
     # (Actually, we're going to assume that the regressions are ALSO in the form
     # (numBaseAnchors, feat_h, feat_w, 4) !  This can be enforced at another stage.
 
-    x1, y1, x2, y2 = tf.unpack(anchors,num=4, axis=3)
-    dx, dy, dw, dh = tf.unpack(bbox_regression,num=4, axis=3)
+    x1, y1, x2, y2 = tf.unpack(anchors,num=4, axis=axis)
+    dx, dy, dw, dh = tf.unpack(bbox_regression,num=4, axis=axis)
 
     # We must get the anchors into the same width/height x/y format as the
     # bbox_regressions
