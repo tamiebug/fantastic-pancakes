@@ -58,7 +58,7 @@ def Rpn(features, image_attr, train=False, namespace="rpn"):
         feature_w = tf.gather_nd(tf.shape(features), [2])
 
         prevLayer = tf.reshape(prevLayer, (1, feature_h, feature_w, 9, 2))
-        prevLayer = tf.transpose(prevLayer, (4, 1, 2, 3, 0))
+        prevLayer = tf.transpose(prevLayer, (3, 1, 2, 4, 0))
         prevLayer = tf.squeeze(prevLayer)
 
         # The dimension on which softmax is performed is automatically the last
@@ -73,7 +73,7 @@ def Rpn(features, image_attr, train=False, namespace="rpn"):
         # (9,14,14,2) (in the case of feat_h=feat_w=14)
 
         prevLayer = tf.reshape(rpnBboxPred, (1, feature_h, feature_w, 9, 4))
-        prevLayer = tf.transpose(prevLayer, (4, 1, 2, 3, 0))
+        prevLayer = tf.transpose(prevLayer, (3,1,2,4,0))
         rpnBboxPred = tf.squeeze(prevLayer)
 
         out = proposalLayer(s.DEF_FEATURE_STRIDE,
@@ -248,7 +248,10 @@ def generateShiftedAnchors(anchors, feature_h, feature_w, feature_stride, image_
     less_raw_anchor_shifts = scaling_factor * raw_anchor_shifts
 
     anchor_shifts = feature_stride * less_raw_anchor_shifts
-    return anchor_shifts + tf.constant(anchors)
+    # Add extra dimensions to anchors for proper broadcasting
+    expanded_anchors = tf.expand_dims(tf.expand_dims(tf.constant(anchors),dim=1),dim=1)
+
+    return anchor_shifts + expanded_anchors
 
 
 def regressAnchors(anchors, bbox_regression, axis=3):
