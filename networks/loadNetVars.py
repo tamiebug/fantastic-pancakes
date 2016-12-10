@@ -24,9 +24,5 @@ def extractLayers(scope, weightsPath, biasesPath):
         with tf.variable_scope(scope) as model_scope:
             with tf.variable_scope(name) as layer_scope:		
                 tf.get_variable("Weights", trainable=True, initializer=tf.constant(weights_tnsr))
-
-    for name, biases_tnsr in biasesDict.iteritems():
-        with tf.variable_scope(scope) as model_scope:
-            with tf.variable_scope(name) as layer_scope:
-                tf.get_variable("Bias", trainable=True, initializer=tf.constant(biases_tnsr))
+                tf.get_variable("Bias", trainable=True, initializer=tf.constant(biasesDict[name]))
     return
