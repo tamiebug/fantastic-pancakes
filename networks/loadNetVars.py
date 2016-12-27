@@ -20,13 +20,9 @@ def extractLayers(scope, weightsPath, biasesPath):
     biasesDict = numpy.load(biasesPath)
 
     # Here, we do a for loop looping through all of the names, "name".
-    for name, weights_tnsr in weightsDict.iteritems():
-        with tf.variable_scope(scope) as model_scope:
+    with tf.variable_scope(scope) as model_scope:
+        for name, weights_tnsr in weightsDict.iteritems():        
             with tf.variable_scope(name) as layer_scope:		
-                tf.get_variable("Weights", trainable=True, initializer=tf.constant(weights_tnsr))
-
-    for name, biases_tnsr in biasesDict.iteritems():
-        with tf.variable_scope(scope) as model_scope:
-            with tf.variable_scope(name) as layer_scope:
-                tf.get_variable("Bias", trainable=True, initializer=tf.constant(biases_tnsr))
-    return
+                tf.get_variable("Weights", trainable=False, initializer=tf.constant(weights_tnsr))
+                tf.get_variable("Bias", trainable=False, initializer=tf.constant(biasesDict[name]))
+    return model_scope

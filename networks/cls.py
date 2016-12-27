@@ -21,7 +21,7 @@ def setUp(pooled_regions, pooled_h, pooled_w, feat_channels, namespace="rcnn"):
     """
 
     last_dimension = pooled_h * pooled_w * feat_channels
-    with tf.variable_scope(namespace) as model_scope:
+    with tf.variable_scope(namespace, reuse=True) as model_scope:
         model_scope.reuse_variables()
         with tf.variable_scope("fc6") as scope:
             flattened_in = tf.reshape(pooled_regions, (-1, last_dimension))

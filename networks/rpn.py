@@ -3,7 +3,6 @@ import tensorflow as tf
 from util import settings as s
 from . import loadNetVars
 
-
 def Rpn(features, image_attr, train=False, namespace="rpn"):
     """ Region proposal network.  Proposes regions to later be pooled and classified/regressed
 
@@ -30,14 +29,14 @@ def Rpn(features, image_attr, train=False, namespace="rpn"):
         # of the layer.  Expects a tf.Variable with name
         # model_scope/layer_scope/Weights and one with
         # model_scope/layer_scope/Bias to already exist.
-        with tf.variable_scope(name) as scope:
+        with tf.variable_scope(name,reuse=True) as scope:
             scope.reuse_variables()
             prevLayer = tf.nn.conv2d(bottom, tf.get_variable("Weights"), stride,
                                      padding="SAME")
             prevLayer = tf.nn.bias_add(prevLayer, tf.get_variable("Bias"))
         return prevLayer
 
-    with tf.variable_scope(namespace) as model_scope:
+    with tf.variable_scope(namespace,reuse=True) as model_scope:
         model_scope.reuse_variables()
 
         layer3x3 = createConvLayer(features, "rpn_conv/3x3")
@@ -59,12 +58,12 @@ def Rpn(features, image_attr, train=False, namespace="rpn"):
 
         prevLayer = tf.reshape(prevLayer, (1, feature_h, feature_w, 9, 2))
         prevLayer = tf.transpose(prevLayer, (3, 1, 2, 4, 0))
-        prevLayer = tf.squeeze(prevLayer)
-
+        prevLayer = tf.squeeze(prevLayer, squeeze_dims=[4])
+        _ = tf.unpack(prevLayer, axis=3)
         # The dimension on which softmax is performed is automatically the last
         # one
         rpnScores  = tf.nn.softmax(prevLayer, name="rpn_cls_prob")
-
+        _ = tf.unpack(prevLayer, axis=3) 
         # Region Proposal Network - Bounding Box Proposal Regression
         rpnBboxPred = createConvLayer(layer3x3, "rpn_bbox_pred")
         
@@ -143,29 +142,44 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
 
     regressedAnchors = regressAnchors(shiftedAnchors, bbox_regressions)
 
+    # TODO remove debug lines(2)
+    tf.identity(regressedAnchors, name="REGRESSED_ANCHORS")
+    
     clippedAnchors = clipRegions(regressedAnchors, img_attr, feature_stride)
 
-    p_anchors, p_scores = prunedScoresAndAnchors(
-        clippedAnchors, scores, minimum_dim)
+    # We're gonna try this, but with unclipped anchors
+    p_anchors, p_scores = prunedScoresAndAnchors(regressedAnchors, 
+            scores, minimum_dim)
+
+    # TODO remove debug lines(2)
+    tf.reshape(tf.unpack(scores, num=2,axis=3)[1], [-1], name="DEBUG_2")
+    tf.identity(clippedAnchors, name="DEBUG_clippedAnchors")
 
     # Assuming the foreground score is the second one,
-    _, fg_scores = tf.unpack(p_scores,num=2,axis=3)
+    _, fg_scores = tf.unpack(p_scores,num=2,axis=1)
+    # TODO remove debug line(2)
+    fg_scores = tf.identity(fg_scores, name="DEBUG_1")
+    tf.identity(p_anchors, name="DEBUG_prunedAnchors")
 
+    # Current Error location.  Scores not large enough?
     top_scores, top_score_indices = tf.nn.top_k(fg_scores, k=pre_nms_keep)
     top_anchors = tf.gather_nd(p_anchors, top_score_indices)
 
+    # These reshapes are not required, we're already there
+
     # Changing shape into form [num_boxes,4] as required by
     # tf.image.non_max_suppression
-    top_anchors_reshaped = tf.reshape(top_anchors, (-1, 4))
+    # top_anchors_reshaped = tf.reshape(top_anchors, (-1, 4))
 
     # Might not need to reshape scores, might need to reshape scores.
-    top_scores_reshaped = tf.reshape(top_scores, [-1])
+    #top_scores_reshaped = tf.reshape(top_scores, [-1])
 
-    post_nms_indices = tf.image.non_max_suppression(top_anchors_reshaped, top_scores_reshaped,
+    # The gather_nd operation in prunedScoresAndAnchors already flattens to the last dimension
+    post_nms_indices = tf.image.non_max_suppression(top_anchors, top_scores,
                                                     post_nms_keep, iou_threshold=iou_threshold)
 
-    final_anchors = tf.gather_nd(top_anchors_reshaped, post_nms_indices, name='proposal_regions')
-    final_scores = tf.gather_nd(top_scores_reshaped, post_nms_indices, 
+    final_anchors = tf.gather_nd(top_anchors, post_nms_indices, name='proposal_regions')
+    final_scores = tf.gather_nd(top_scores, post_nms_indices, 
                                     name='proposal_region_scores')
 
     return final_anchors, final_scores
@@ -175,22 +189,27 @@ def prunedScoresAndAnchors(anchors, scores, minimum_dim):
     """ Return list of anchors and scores larger than a given minimum size
 
         It is assumed that the shape of scores is (numAnchors, feat_h, feat_w, 2)
+        We output tensors of shape (?,2) for scores_gathered and (?,4) for
+        anchors_gathered
     """
     x1, y1, x2, y2 = tf.unpack(anchors, num=4, axis=3)
 
     w = tf.sub(x2, x1)
     h = tf.sub(y2, y1)
 
-    width_suffices = tf.greater_equal(w, tf.constant([minimum_dim + 1], dtype=tf.float32))
-    height_suffices = tf.greater_equal(h, tf.constant([minimum_dim + 1], dtype=tf.float32))
+    minimum_dim = 16
+
+    width_suffices = tf.greater_equal(w, tf.constant([minimum_dim], dtype=tf.float32), 
+            name="geqw")
+    height_suffices = tf.greater_equal(h, tf.constant([minimum_dim], dtype=tf.float32) ,
+            name="geqh")
 
     both_suffice = tf.logical_and(width_suffices, height_suffices)
     indices = tf.where(both_suffice)
 
-    # The actual grabbing of indexed values happens here
+    # The actual grabbing of indexed values happens here 
     anchors_gathered = tf.gather_nd(anchors, indices)
-    scores_gathered = tf.gather_nd(anchors, indices)
-
+    scores_gathered = tf.gather_nd(scores, indices)
     return anchors_gathered, scores_gathered
 
 
@@ -204,8 +223,8 @@ def clipRegions(anchors, img_attr, feature_stride):
 
     zero = tf.constant([0.])
     # img_attr = (img_h, img_w, scaling_factor)
-    max_x = [tf.gather_nd(img_attr, [1]) * feature_stride]
-    max_y = [tf.gather_nd(img_attr, [0]) * feature_stride]
+    max_x = [tf.gather_nd(img_attr, [1], name="clip_img_w")]
+    max_y = [tf.gather_nd(img_attr, [0], name="clip_img_h")]
 
     x1_clipped = tf.minimum(tf.maximum(zero, x1), max_x)
     x2_clipped = tf.minimum(tf.maximum(zero, x2), max_x)

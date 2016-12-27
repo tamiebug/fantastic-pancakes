@@ -19,15 +19,14 @@ class Vgg19():
 
         # Extracts the information from .npz files and puts them into properly
         # scoped tf.Variable(s)
-        loadNetVars.extractLayers(self.namespace, weightsPath, biasesPath)
-
+        self.namespace = loadNetVars.extractLayers(self.namespace, weightsPath, biasesPath)
         def createConvLayer(bottom, name, trainable=True):
             # Creates a convolutional Tensorflow layer given the name
             # of the layer.  This name is looked up in the weighsDict and
             # biasesDict in order to obtain the parameters to construct the
             # layer
 
-            with tf.variable_scope(name) as scope:
+            with tf.variable_scope(name,reuse=True) as scope:
                 conv = tf.nn.conv2d(bottom, tf.get_variable(
                     "Weights"), [1, 1, 1, 1], padding="SAME")
                 bias = tf.nn.bias_add(conv, tf.get_variable("Bias"))
@@ -41,7 +40,7 @@ class Vgg19():
             INPUT_SIZE = 25088
             OUTPUT_SIZE = 4096
 
-            with tf.variable_scope(name) as scope:
+            with tf.variable_scope(name,reuse=True) as scope:
                 flattenedInput = tf.reshape(bottom, [-1, INPUT_SIZE])
                 layer = tf.nn.bias_add(
                     tf.matmul(flattenedInput, tf.get_variable("Weights")), tf.get_variable("Bias"))
@@ -56,7 +55,7 @@ class Vgg19():
 
             INPUT_SIZE = 4096
 
-            with tf.variable_scope(name) as scope:
+            with tf.variable_scope(name,reuse=True) as scope:
                 layer = tf.nn.bias_add(
                         tf.matmul(bottom, tf.get_variable("Weights")), tf.get_variable("Bias"))
 
@@ -65,13 +64,13 @@ class Vgg19():
         # All layer types have been defined, it is now time to actually make
         # the model
         self.layers = {}
-        layerNames = [ 'conv1_1', 'relu1_1', 'conv1_2', 'relu2_2', 'pool1',
+        layerNames = [ 'conv1_1', 'relu1_1', 'conv1_2', 'relu1_2', 'pool1',
                        'conv2_1', 'relu2_1', 'conv2_2', 'relu2_2', 'pool2',
                        'conv3_1', 'relu3_1', 'conv3_2', 'relu3_2', 'conv3_3', 'relu3_3', 'conv3_4', 'relu3_4', 'pool3',
                        'conv4_1', 'relu4_1', 'conv4_2', 'relu4_2', 'conv4_3', 'relu4_3', 'conv4_4', 'relu4_4', 'pool4',
                        'conv5_1', 'relu5_1', 'conv5_2', 'relu5_2', 'conv5_3', 'relu5_3', 'conv5_4', 'relu5_4', 'pool5']
 
-        with tf.variable_scope(self.namespace) as scope:
+        with tf.variable_scope(self.namespace, reuse=True) as scope:
             # We start out with the input img
             prevLayer = img
 
