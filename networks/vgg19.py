@@ -4,10 +4,13 @@ import util.settings as s
 import loadNetVars
 
 
-class Vgg19():
-
-    def __init__(self, namespace="vgg19"):
+class Vgg19(object):
+    def __init__(self, namespace="vgg19", unique_namespace=False):
         self.namespace = namespace
+        if isinstance(namespace, basestring) and not unique_namespace:
+            # Fixes issue of namespace not being reused.  This non reuse was not intended
+            if not self.namespace.endswith("/"):
+                self.namespace = namespace + "/"
 
     def buildGraph(self, img, train=False, weightsPath=s.DEF_WEIGHTS_PATH,
                    biasesPath=s.DEF_BIASES_PATH, cutoff=[]):
