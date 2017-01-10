@@ -8,8 +8,9 @@ def add_root(path):
 
 VGG_MEAN = [103.939, 116.779, 123.68]
 
-# copy from FRCNN
-FRCNN_MEAN = [[[102.9801, 115.9465, 112.7717]]]
+# copy from FRCNN, except order is changed.  RGB order
+FRCNN_MEAN = [[[112.7717, 115.9465, 102.9801]]]
+#FRCNN_MEAN = [[[102.9801, 115.9465, 112.7717]]]  old order in BGR
 
 DEF_CAFFEMODEL_PATH = add_root("models/VGG_ILSVRC_19_layers.caffemodel")
 DEF_PROTOTXT_PATH = add_root("models/VGG_2014_19.prototxt")
