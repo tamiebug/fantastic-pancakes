@@ -15,7 +15,7 @@ def eval_cpu(operation, s=None):
             with tf.device("/cpu:0"):
                 return sess.run(operation)
 
-def eval_gpu(operation):
+def eval_gpu(operation, s=None):
     ''' Evaluate operation on default graph and with gpu
     
         If s is not None, then we use s as a tf.test.TestCase from which we then
@@ -23,9 +23,9 @@ def eval_gpu(operation):
     '''
     if s is None:
         with tf.Session() as sess:
-            with tf.device("/cpu:0"):
+            with tf.device("/gpu:0"):
                 return sess.run(operation)
     else:
         with s.test_session() as sess:
-            with tf.device("/cpu:0"):
+            with tf.device("/gpu:0"):
                 return sess.run(operation)
