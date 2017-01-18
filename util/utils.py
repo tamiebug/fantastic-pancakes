@@ -195,5 +195,17 @@ def isolatedFunctionRun(func, textSuppress, *args, **kwargs):
         # Close the os.devnulls	
         os.close(nulls[0])
         os.close(nulls[1])	
-    print "wow!"
     return
+
+def init_vgg16(namespace=None):
+    if namespace==None:
+        vgg16_base = Vgg19()
+    else:
+        vgg16_base = Vgg19(namespace)
+    vgg16_base.buildGraph(image, train=False,
+            weightsPath=s.DEF_FRCNN_WEIGHTS_PATH,
+            biasesPath=s.DEF_FRCNN_BIASES_PATH,
+            cutoff=['conv3_4', 'relu3_4', 'conv4_4', 'relu4_4', 'conv5_4', 'relu5_4',
+                    'pool5','fc6','relu6','fc7', 'relu7', 'fc8', 'prob']
+            )
+    return vgg16_base
