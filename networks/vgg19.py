@@ -13,37 +13,50 @@ class Vgg19(object):
                 self.namespace = namespace + "/"
 
     def buildGraph(self, img, train=False, weightsPath=s.DEF_WEIGHTS_PATH,
-                   biasesPath=s.DEF_BIASES_PATH, cutoff=[]):
-        # Takes as input a Tensorflow placeholder or layer and whether
-        # the graph is being trained or just being used for prediction.
-        # If the variable cutoff is set to an array of strings, layers
-        # with names corresponding to these strings will be excluded from
-        # final created graph
+            biasesPath=s.DEF_BIASES_PATH, cutoff=[], device="/gpu:0"):
+        """
+        Builds the network up based on the given parameters.
+
+        Takes as input a Tensorflow placeholder or layer and whether
+        the graph is being trained or just being used for prediction.
+        If the variable cutoff is set to an array of strings, layers
+        with names corresponding to these strings will be excluded from
+        final created graph ( This allows us to construct vgg16 from this
+        class as well )
+        """
 
         # Extracts the information from .npz files and puts them into properly
         # scoped tf.Variable(s)
         self.namespace = loadNetVars.extractLayers(self.namespace, weightsPath, biasesPath)
         def createConvLayer(bottom, name, trainable=True):
-            # Creates a convolutional Tensorflow layer given the name
-            # of the layer.  This name is looked up in the weighsDict and
-            # biasesDict in order to obtain the parameters to construct the
-            # layer
 
             with tf.variable_scope(name,reuse=True) as scope:
+=======
+            """
+            Creates a convolutional Tensorflow layer given its name.
+            
+            Name lookup occurs in the weightsDict and biasesDict in order to obtain the
+            parameters to construct the layer
+            """
+
+            with tf.variable_scope(name) as scope, tf.device(device) as dev:
                 conv = tf.nn.conv2d(bottom, tf.get_variable(
                     "Weights"), [1, 1, 1, 1], padding="SAME")
                 bias = tf.nn.bias_add(conv, tf.get_variable("Bias"))
             return bias
 
         def createFirstFcLayer(bottom, name, trainable=True):
-            # Creates the first fully connected layer which converts the
-            # output of the last convolutional layer to the input for the next
-            # fully connected ones.  Returns the bias layer.
+            """
+            Creates the first fully connected layer.
+            
+            This layer converts the  output of the last convolutional layer to the
+            input for the next fully connected ones.  Returns the bias layer.
+            """
 
             INPUT_SIZE = 25088
             OUTPUT_SIZE = 4096
 
-            with tf.variable_scope(name,reuse=True) as scope:
+            with tf.variable_scope(name, reuse=True) as scope, tf.device(device) as dev:
                 flattenedInput = tf.reshape(bottom, [-1, INPUT_SIZE])
                 layer = tf.nn.bias_add(
                     tf.matmul(flattenedInput, tf.get_variable("Weights")), tf.get_variable("Bias"))
@@ -51,21 +64,23 @@ class Vgg19(object):
             return layer
 
         def createFcLayer(bottom, name, trainable=True):
-            # Creates a fully connected layer with INPUT_SIZE inputs and
-            # INPUT_SIZE outputs.  Loads the weights from the weightsDict and
-            # biasesDict dictionaries using they key value name and returns the
-            # bias layer.
+            """ 
+            Creates a fully connected layer with INPUT_SIZE inputs and outputs.
+
+            Loads the weights from the weightsDict and biasesDict dictionaries using 
+            their key value name and returns the bias layer.
+            """
 
             INPUT_SIZE = 4096
 
-            with tf.variable_scope(name,reuse=True) as scope:
+            with tf.variable_scope(name, reuse=True) as scope, tf.device(device) as dev:
                 layer = tf.nn.bias_add(
                         tf.matmul(bottom, tf.get_variable("Weights")), tf.get_variable("Bias"))
 
             return layer
 
         # All layer types have been defined, it is now time to actually make
-        # the model
+        # the modele
         self.layers = {}
         layerNames = [ 'conv1_1', 'relu1_1', 'conv1_2', 'relu1_2', 'pool1',
                        'conv2_1', 'relu2_1', 'conv2_2', 'relu2_2', 'pool2',
@@ -73,7 +88,7 @@ class Vgg19(object):
                        'conv4_1', 'relu4_1', 'conv4_2', 'relu4_2', 'conv4_3', 'relu4_3', 'conv4_4', 'relu4_4', 'pool4',
                        'conv5_1', 'relu5_1', 'conv5_2', 'relu5_2', 'conv5_3', 'relu5_3', 'conv5_4', 'relu5_4', 'pool5']
 
-        with tf.variable_scope(self.namespace, reuse=True) as scope:
+        with tf.variable_scope(self.namespace, reuse=True) as scope, tf.device(device) as dev:
             # We start out with the input img
             prevLayer = img
 
