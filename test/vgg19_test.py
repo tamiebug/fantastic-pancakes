@@ -234,16 +234,17 @@ class Vgg16Test(unittest.TestCase):
         self.assertTrue(nparray.shape==self.reference_activations[name].shape,
                 msg="Unequal shapes.  Ref. shape is {}, array shape is {}".format(self.reference_activations[name].shape, nparray.shape))
         greatest_diff = np.amax(np.absolute(self.reference_activations[name] - nparray))
-        return self.assertLessEqual(greatest_diff, tolerance, 
+        self.assertLessEqual(greatest_diff, tolerance, 
             msg="Greatest difference was %f" % greatest_diff)
-
+        return greatest_diff <= tolerance
     def test_relu4_1(self):
         """ Tests whether the activations for relu4_1 match a given reference activation. """
         im_data, _ = frcnn_forward.process_image(
                 os.path.join(self.base_dir, "images/000456.jpg"))
         im_data = np.expand_dims(im_data, axis=0)
 
-        def runGraph(self, im):
+        success = [None]
+        def runGraph(self, im, success):
             with tf.Session() as sess, tf.device("/gpu:0") as dev:
                 img = tf.placeholder(
                 "float", im_data.shape, name="images")
@@ -265,9 +266,12 @@ class Vgg16Test(unittest.TestCase):
                 sess.close()
                 # Does output come in list form if only one output is produced? [probably]
                 # Blob name is conv4_1, not relu4_1; relu is done in-place by caffe
-                return self.array_equality_assert(np.expand_dims(output[0],0), 'conv4_1')
+                success[0] = self.array_equality_assert(np.expand_dims(output[0],0), 'conv4_1')
+                return 
 
-        return utils.isolatedFunctionRun( runGraph, False, self=self, im=im_data )
+        utils.isolatedFunctionRun( runGraph, False, self=self, im=im_data, success=success)
+        self.assertTrue(success[0])
+        return
 
     def test_relu5_3(self):
         """ 
@@ -278,8 +282,8 @@ class Vgg16Test(unittest.TestCase):
         particular test is that the VGG16 network's activations may be too large in 
         tensorflow, requiring the network to be broken up
         """
-
-        def runGraph(self):
+        success = [None]
+        def runGraph(self, success):
             config = tf.ConfigProto()
             #config.log_device_placement = True
             with tf.Session(config=config) as sess, tf.device("/gpu:0") as dev:
@@ -309,7 +313,11 @@ class Vgg16Test(unittest.TestCase):
                 sess.run(tf.initialize_all_variables())
                 output = sess.run(net.layers['relu5_3'], feed_dict={conv4_1 : conv4_1_in})
                 sess.close()
-                return self.array_equality_assert(np.expand_dims(output[0],0), 'conv5_3')
-        return utils.isolatedFunctionRun(runGraph, False, self=self)
+                success[0] = self.array_equality_assert(np.expand_dims(output[0],0), 'conv5_3')
+                return
+
+        utils.isolatedFunctionRun(runGraph, False, self=self, success=success)
+        self.assertTrue(success[0])
+        return
 if __name__ == '__main__':
     unittest.main()

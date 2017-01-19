@@ -11,6 +11,7 @@ import numpy as np
 import sys
 from itertools import izip
 import networks.loadNetVars
+import cv2
 
 def faster_rcnn(image, image_attributes):
     """ Builds a Faster R-CNN network
@@ -81,17 +82,16 @@ def process_image(imPath):
     scaleToMax = 1000.
 
     img = skimage.io.imread(imPath)
+    img = img - np.array(s.FRCNN_MEAN)
     shorterDim = np.argmin(img.shape[:-1])
     longerDim = 0 if shorterDim==1 else 1
-    img = img - np.array(s.FRCNN_MEAN)
     ratio = scaleToMin / img.shape[shorterDim]
 
     if img.shape[longerDim] * ratio > scaleToMax:
         ratio = scaleToMax / img.shape[longerDim]
 
     # resize image using ratio
-    resized_image = skimage.transform.rescale(img, ratio)
-    # resized_image = skimage.linear_interpolation(information)
+    resized_image = cv2.resize(img, None, None,fx=ratio, fy=ratio, interpolation=cv2.INTER_LINEAR)
     return resized_image, np.array([img.shape[1], img.shape[0], ratio])
 
 def demo(img):
