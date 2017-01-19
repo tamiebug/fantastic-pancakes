@@ -230,7 +230,10 @@ class Vgg16Test(unittest.TestCase):
         """
         if not name in self.reference_activations:
             raise KeyError("Name given as argument to array_equality_assert does not exist in .npz file")
-        greatest_diff = np.amax(np.absolute(self.reference_activations[name]))
+        # Check for shape mismatches
+        self.assertTrue(nparray.shape==self.reference_activations[name].shape,
+                msg="Unequal shapes.  Ref. shape is {}, array shape is {}".format(self.reference_activations[name].shape, nparray.shape))
+        greatest_diff = np.amax(np.absolute(self.reference_activations[name] - nparray))
         return self.assertLessEqual(greatest_diff, tolerance, 
             msg="Greatest difference was %f" % greatest_diff)
 
@@ -258,11 +261,11 @@ class Vgg16Test(unittest.TestCase):
                     )
 
                 sess.run(tf.initialize_all_variables())
-                output = sess.run(['relu4_1'], feed_dict={img:im_data})
+                output = sess.run(net.layers['relu4_1'], feed_dict={img:im_data})
                 sess.close()
                 # Does output come in list form if only one output is produced? [probably]
                 # Blob name is conv4_1, not relu4_1; relu is done in-place by caffe
-                return self.array_equality_assert(output[0], 'conv4_1')
+                return self.array_equality_assert(np.expand_dims(output[0],0), 'conv4_1')
 
         return utils.isolatedFunctionRun( runGraph, False, self=self, im=im_data )
 
@@ -278,7 +281,7 @@ class Vgg16Test(unittest.TestCase):
 
         def runGraph(self):
             config = tf.ConfigProto()
-            config.log_device_placement = True
+            #config.log_device_placement = True
             with tf.Session(config=config) as sess, tf.device("/gpu:0") as dev:
                 try:
                     conv4_1_in = self.reference_activations['conv4_1']
@@ -297,16 +300,16 @@ class Vgg16Test(unittest.TestCase):
                         'conv4_1', 'relu4_1']
 
                 cutoffs = vgg16_cutoffs + before_relu4_1_cutoffs
-                net = vgg19.Vgg19("vgg16test_2") 
+                net = vgg19.Vgg19(namespace="vgg16test_2") 
                 net.buildGraph(conv4_1, train=False,
                     weightsPath=s.DEF_FRCNN_WEIGHTS_PATH,
                     biasesPath=s.DEF_FRCNN_BIASES_PATH,
                     cutoff=cutoffs
                     )
                 sess.run(tf.initialize_all_variables())
-                output = sess.run(['relu5_3'], feed_dict={conv4_1 : conv4_1_in})
+                output = sess.run(net.layers['relu5_3'], feed_dict={conv4_1 : conv4_1_in})
                 sess.close()
-                return self.array_equality_assert(output[0], 'conv5_3')
+                return self.array_equality_assert(np.expand_dims(output[0],0), 'conv5_3')
         return utils.isolatedFunctionRun(runGraph, False, self=self)
 if __name__ == '__main__':
     unittest.main()
