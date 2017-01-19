@@ -27,14 +27,11 @@ class Vgg19(object):
 
         # Extracts the information from .npz files and puts them into properly
         # scoped tf.Variable(s)
-        self.namespace = loadNetVars.extractLayers(self.namespace, weightsPath, biasesPath)
+        loadNetVars.extractLayers(self.namespace, weightsPath, biasesPath)
         def createConvLayer(bottom, name, trainable=True):
-
-            with tf.variable_scope(name,reuse=True) as scope:
-=======
             """
             Creates a convolutional Tensorflow layer given its name.
-            
+        
             Name lookup occurs in the weightsDict and biasesDict in order to obtain the
             parameters to construct the layer
             """
