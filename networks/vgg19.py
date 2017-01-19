@@ -101,7 +101,7 @@ class Vgg19(object):
                         prevLayer, layername, train)
                 elif layername.startswith('pool'):
                     self.layers[layername] = tf.nn.max_pool(prevLayer, ksize=[1, 2, 2, 1],
-                                                            strides=[1, 2, 2, 1], padding='VALID', name=layername)
+                                                            strides=[1, 2, 2, 1], padding='SAME', name=layername)
                 elif layername.startswith('relu'):
                     self.layers[layername] = tf.nn.relu(prevLayer, layername)
                 else:
