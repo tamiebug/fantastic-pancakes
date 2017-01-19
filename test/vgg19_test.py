@@ -7,6 +7,7 @@ from util import utils
 from networks import vgg19
 from util import settings as s
 from test import testUtils
+from layers.custom_layers import roi_pooling_layer
 
 import threading
 import os
@@ -212,6 +213,28 @@ class Vgg19SavingTest(unittest.TestCase):
             if os.path.isfile("models/" + biasFn + ".npz"):
                 os.remove("models/" + biasFn + ".npz")
 
+def array_equality_assert(self, nparray, ref_nparray, tolerance=.01):
+    """
+    Looks up activation in list of activations to see whether it is as expected.
+
+    Assumes that self is a subclass of unittest.TestCase
+
+    Parameters:
+    self        -- subclass of unittest.TestCase on which asserts will be run.
+    nparray     -- numpy array that is undergoing testing
+    ref_nparray -- reference numpy array that nparray is being compared to
+    tolerance   -- maximum amount of difference between the entries of nparray 
+                        allowed before failing the test.
+    """
+    # Check for shape mismatches
+    self.assertTrue(nparray.shape==ref_nparray.shape,
+            msg="Unequal shapes.  Ref. shape is {}, array shape is {}".format(ref_nparray.shape, nparray.shape))
+    greatest_diff = np.amax(np.absolute(ref_nparray - nparray))
+    self.assertLessEqual(greatest_diff, tolerance, 
+        msg="Greatest difference was %f" % greatest_diff)
+    return greatest_diff <= tolerance
+
+
 class Vgg16Test(unittest.TestCase):
     """
     Loads the modified vgg16 base model, which is lacking the final fully-connected layers, ending
@@ -224,36 +247,24 @@ class Vgg16Test(unittest.TestCase):
         self.reference_activations = np.load(os.path.join(
             self.base_dir, "activations/test_values.npz"))
 
-    def array_equality_assert(self, nparray, name, tolerance=.01):
-        """
-        Looks up activation in list of activations to see whether it is as expected.
-        """
-        if not name in self.reference_activations:
-            raise KeyError("Name given as argument to array_equality_assert does not exist in .npz file")
-        # Check for shape mismatches
-        self.assertTrue(nparray.shape==self.reference_activations[name].shape,
-                msg="Unequal shapes.  Ref. shape is {}, array shape is {}".format(self.reference_activations[name].shape, nparray.shape))
-        greatest_diff = np.amax(np.absolute(self.reference_activations[name] - nparray))
-        self.assertLessEqual(greatest_diff, tolerance, 
-            msg="Greatest difference was %f" % greatest_diff)
-        return greatest_diff <= tolerance
+
     def test_relu4_1(self):
         """ Tests whether the activations for relu4_1 match a given reference activation. """
         im_data, _ = frcnn_forward.process_image(
                 os.path.join(self.base_dir, "images/000456.jpg"))
         im_data = np.expand_dims(im_data, axis=0)
 
-        success = [None]
-        def runGraph(self, im, success):
+        def runGraph(self, im):
             with tf.Session() as sess, tf.device("/gpu:0") as dev:
                 img = tf.placeholder(
-                "float", im_data.shape, name="images")
+                    "float", im_data.shape, name="images")
                 net = vgg19.Vgg19("vgg16test_1") 
                     # These are the layers of VGG19 we don't use when making a VGG16 network
                 vgg16_cutoffs = ['conv3_4', 'relu3_4', 'conv4_4', 'relu4_4', 'conv5_4', 'relu5_4',
                                 'pool5','fc6','relu6','fc7', 'relu7', 'fc8', 'prob']
                 # Since we're only testing up to relu4_1, we can remove everything after it
-                relu4_1_cutoffs = ['conv4_2', 'relu4_2', 'conv4_3', 'relu4_3', 'pool4', 'conv5_1', 'relu5_1'            ,'conv5_2', 'relu5_2', 'conv5_3', 'relu5_3']
+                relu4_1_cutoffs = ['conv4_2', 'relu4_2', 'conv4_3', 'relu4_3', 'pool4', 'conv5_1', 'relu5_1',
+                        'conv5_2', 'relu5_2', 'conv5_3', 'relu5_3']
                 cutoffs = vgg16_cutoffs + relu4_1_cutoffs
                 net.buildGraph(img, train=False,
                     weightsPath=s.DEF_FRCNN_WEIGHTS_PATH,
@@ -266,12 +277,9 @@ class Vgg16Test(unittest.TestCase):
                 sess.close()
                 # Does output come in list form if only one output is produced? [probably]
                 # Blob name is conv4_1, not relu4_1; relu is done in-place by caffe
-                success[0] = self.array_equality_assert(np.expand_dims(output[0],0), 'conv4_1')
-                return 
+                return array_equality_assert(self, np.expand_dims(output[0],0), self.reference_activations['conv4_1'])
 
-        utils.isolatedFunctionRun( runGraph, False, self=self, im=im_data, success=success)
-        self.assertTrue(success[0])
-        return
+        return self.assertTrue( utils.isolatedFunctionRun( runGraph, False, self=self, im=im_data) )
 
     def test_relu5_3(self):
         """ 
@@ -282,8 +290,7 @@ class Vgg16Test(unittest.TestCase):
         particular test is that the VGG16 network's activations may be too large in 
         tensorflow, requiring the network to be broken up
         """
-        success = [None]
-        def runGraph(self, success):
+        def runGraph(self):
             config = tf.ConfigProto()
             #config.log_device_placement = True
             with tf.Session(config=config) as sess, tf.device("/gpu:0") as dev:
@@ -313,11 +320,72 @@ class Vgg16Test(unittest.TestCase):
                 sess.run(tf.initialize_all_variables())
                 output = sess.run(net.layers['relu5_3'], feed_dict={conv4_1 : conv4_1_in})
                 sess.close()
-                success[0] = self.array_equality_assert(np.expand_dims(output[0],0), 'conv5_3')
-                return
+                return array_equality_assert(self, np.expand_dims(output[0],0), self.reference_activations['conv5_3'])
 
-        utils.isolatedFunctionRun(runGraph, False, self=self, success=success)
-        self.assertTrue(success[0])
-        return
+        return self.assertTrue(utils.isolatedFunctionRun(runGraph, False, self=self))
+
+class ClsTest(unittest.TestCase):
+    """
+    Tests whether the classification part of the network has activations matching a reference.
+
+    It is fed in the features and regions of interest, and is expected to reproduce the correct
+    pooled regions of interest (pool5), correct fc7, cls_score, and bbox_pred (correct classi-
+    fication scores and bounding box regression box predictions
+    """
+
+    def setUp(self):
+        self.base_dir = os.path.dirname(os.path.realpath(__file__))
+        self.reference_activations = np.load(os.path.join(
+            self.base_dir, "activations/test_values.npz"))
+
+    def test_roi_pooling(self):
+        """
+        Tests the Region of Interest pooling layer (pool5) using actual activation data from the reference network.
+
+        We feed in the rois data, the conv5_3 features data, and the image data (dimensions and scale factor)
+        obtained from the test image in test/images/000456.jpg and compare it to the expected activation values.
+        """
+
+        # We don't need the actual image pixels, just the dimensionality and scale information.
+        _, im_info = frcnn_forward.process_image(
+                os.path.join(self.base_dir, "images/000456.jpg"))
+
+        def runGraph(self, im_info):
+            with tf.Session() as sess, tf.device("/cpu:0") as dev:
+                # the RoI Pooling code currently is CPU only, GPU version not yet developed.
+                try:
+                    features = self.reference_activations['conv5_3']
+                except KeyError:
+                    print("Warning:  conv5_3 not found in reference activations.  Something \
+                            wrong with .npz file")
+                try:
+                    rois = self.reference_activations['rois']
+                except KeyError:
+                    print("Warning: rois not found in reference activations.  Something \
+                            wrong with .npz file")
+
+                return sess.run( roi_pooling_layer(features,
+                                    im_info,
+                                    regions,
+                                    7, # Pooled height
+                                    7, # Pooled width
+                                    16,# Feature Stride (16 for vgg)
+                                    name='roi_pooling_layer') 
+                                 )
+        result = utils.isolatedFunctionRun(runGraph, False, im_info)
+        return array_equality_assert(self, result, self.reference_activations['pool5'])
+
+    def test_fc7(self):
+        """ Tests the FC layers, by looking at fc7, using the roi pooled input"""
+        pass
+    
+    def test_cls_score(self):
+        """ Tests the cls_score layer via comarison to a reference activation"""
+        pass
+    
+    def test_bbox_pred(self):
+        """ Tests the bbox_pred layer via comparison to a reference activation"""
+        pass
+
 if __name__ == '__main__':
     unittest.main()
