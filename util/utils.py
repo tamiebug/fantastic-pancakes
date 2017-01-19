@@ -183,8 +183,18 @@ def isolatedFunctionRun(func, textSuppress, *args, **kwargs):
         # Set stderr and stdout to null
         os.dup2(nulls[0], 1)
         os.dup2(nulls[1], 2)
+    
+    # Wrapping the function so that we can capture the output value.  t.join() won't give it to us
+    output = {}
+    def wrapped_func(function, out, *args, **kwargs):
+        out['return_val'] = function(*args, **kwargs)
+        return
 
-    t = threading.Thread(target=func, args=args, kwargs=kwargs)
+    # Need to put the func and output as first arguments to wrapped_func
+    new_args = [func, output]
+    new_args.extend(args) # Now put the old arguments afterwards
+
+    t = threading.Thread(target=wrapped_func, args=new_args, kwargs=kwargs)
     t.start()
     t.join()
 
@@ -195,7 +205,8 @@ def isolatedFunctionRun(func, textSuppress, *args, **kwargs):
         # Close the os.devnulls	
         os.close(nulls[0])
         os.close(nulls[1])	
-    return
+
+    return output['return_val']
 
 def init_vgg16(namespace=None):
     if namespace==None:
