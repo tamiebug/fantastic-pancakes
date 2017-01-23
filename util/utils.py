@@ -1,6 +1,6 @@
 import numpy
 import caffe
-import tensorflow
+import tensorflow as tf
 from . import settings as s
 
 from urllib import urlretrieve
@@ -9,6 +9,7 @@ import os
 import skimage.io
 import skimage.transform
 import tarfile
+from contextlib import contextmanager
 
 class Singleton(type):
     """ Simple Singleton for use as metaclass """
@@ -220,3 +221,39 @@ def init_vgg16(namespace=None):
                     'pool5','fc6','relu6','fc7', 'relu7', 'fc8', 'prob']
             )
     return vgg16_base
+
+@contextmanager
+def easy_scope(name, *args, **kwargs):
+    """
+    Opens a variable and name scope so that things work as you think they should.
+
+    variable_scopes automatically reuse names for variables, but Tensorflow does not 
+    normally reuse the name_scope that comes with, instead making a new one every time 
+    variable_scope is called, adding underscores if needed to make them unique.  This
+    forces tensorflow's hand, making it reuse the name as well as variable scopes if
+    the reuse keyword is not set to False.
+    """
+    
+    # If we don't want to reuse, then don't massage the scopes.  Normal behavoir suffices
+    if "reuse" in kwargs:
+        if kwargs["reuse"]==False:
+            with tf.variable_scope(name, *args, **kwargs):
+                yield
+    
+    # Not part of the public API, may be broken by an update
+    try:
+        curr_scope = tf.get_default_graph()._name_stack 
+    except AttributeError:
+        raise AttributeError("tf.get_default_graph() no longer has attribute _name_stack. \
+                This function has been broken by a tensorflow build after .12.  Either \
+                fix this function, or revert to an older version of tensorflow")
+    new_name = name
+    if not name.endswith("/"):
+        new_name = new_name + "/"
+
+    if not curr_scope=="":
+        new_name = curr_scope + "/" + new_name
+
+    with tf.variable_scope(name, *args, **kwargs):
+        with tf.name_scope(new_name):
+            yield

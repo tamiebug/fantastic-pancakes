@@ -1,6 +1,8 @@
 import numpy as np
 import tensorflow as tf
 
+from util.utils import easy_scope
+
 def setUp(pooled_regions, pooled_h, pooled_w, feat_channels, namespace="rcnn"):
     """
     This function takes in the roi_pooling_layer output and spits out a bounding box regression and classification score.
@@ -21,32 +23,34 @@ def setUp(pooled_regions, pooled_h, pooled_w, feat_channels, namespace="rcnn"):
     """
 
     last_dimension = pooled_h * pooled_w * feat_channels
-    with tf.variable_scope(namespace, reuse=True) as model_scope:
-        model_scope.reuse_variables()
-        with tf.variable_scope("fc6") as scope:
+    with easy_scope(namespace, reuse=True):
+        with easy_scope("fc6") as scope:
             flattened_in = tf.reshape(pooled_regions, (-1, last_dimension))
             prevLayer = tf.nn.bias_add(tf.matmul(flattened_in, 
-                            tf.get_variable("Weights")), tf.get_variable("Bias"))
+                        tf.get_variable("Weights")), tf.get_variable("Bias"))
         
         prevLayer = tf.nn.relu(prevLayer, name="relu6")
 
-        with tf.variable_scope("fc7") as scope:
+        with easy_scope("fc7", reuse=True):
             prevLayer = tf.nn.bias_add(tf.matmul(prevLayer,
                             tf.get_variable("Weights")), tf.get_variable("Bias"))
 
         prevLayer = tf.nn.relu(prevLayer, name="relu7")
 
         # Produce classification probabilities
-        with tf.variable_scope("cls_score") as scope:
+        with easy_scope("cls_score", reuse=True):
+            weights = tf.get_variable("Weights")
+            bias = tf.get_variable("Bias")
             scoreLayer = tf.nn.bias_add(tf.matmul(prevLayer,
-                            tf.get_variable("Weights")), tf.get_variable("Bias"),name="out")
+                            weights), bias,name="out")
         
         probLayer = tf.nn.softmax(scoreLayer, name="cls_prob")
 
         # Produce regressions (note these are with respect to the individual regions, so the
         # actual regions in the image resulting from these is yet to be calculated
-        with tf.variable_scope("bbox_pred") as scope:
+        with easy_scope("bbox_pred", reuse=True) as scope:
             bboxPred = tf.nn.bias_add(tf.matmul(prevLayer,
                         tf.get_variable("Weights")), tf.get_variable("Bias"), name="out")
+
 
     return bboxPred, probLayer
