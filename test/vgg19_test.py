@@ -8,6 +8,8 @@ from networks import vgg19
 from util import settings as s
 from test import testUtils
 from layers.custom_layers import roi_pooling_layer
+from networks import cls
+from networks import loadNetVars
 
 import threading
 import os
@@ -345,7 +347,6 @@ class ClsTest(unittest.TestCase):
         We feed in the rois data, the conv5_3 features data, and the image data (dimensions and scale factor)
         obtained from the test image in test/images/000456.jpg and compare it to the expected activation values.
         """
-
         # We don't need the actual image pixels, just the dimensionality and scale information.
         _, im_info = frcnn_forward.process_image(
                 os.path.join(self.base_dir, "images/000456.jpg"))
@@ -364,28 +365,91 @@ class ClsTest(unittest.TestCase):
                     print("Warning: rois not found in reference activations.  Something \
                             wrong with .npz file")
 
-                return sess.run( roi_pooling_layer(features,
-                                    im_info,
-                                    regions,
+                im_info[2] = 1. / im_info[2] 
+   
+                fake_info = [1,1,8174652]
+
+                feats = tf.placeholder("float", [None,None,None])
+                rois_placeholder = tf.placeholder("float", [None,4])
+                info = tf.placeholder("float", [3])
+
+                # To see if anything is going on here at all 
+                # features = np.ones(features.shape)*0
+                rois = np.ones(rois.shape)*0
+
+                # 33.301205 is the diff you get if everything is zeroes.
+
+                pool_layer = roi_pooling_layer(feats, # Need to squeeze out batch number
+                                    info,
+                                    rois_placeholder,
                                     7, # Pooled height
                                     7, # Pooled width
                                     16,# Feature Stride (16 for vgg)
                                     name='roi_pooling_layer') 
-                                 )
-        result = utils.isolatedFunctionRun(runGraph, False, im_info)
+                return sess.run(pool_layer, feed_dict={
+                    feats : np.squeeze(features,0)*2,
+                    rois_placeholder : rois[:,[1,2,3,4]],
+                    info : fake_info
+                    })[0]
+
+        result= utils.isolatedFunctionRun(runGraph, False, self, im_info)
         return array_equality_assert(self, result, self.reference_activations['pool5'])
 
     def test_fc7(self):
         """ Tests the FC layers, by looking at fc7, using the roi pooled input"""
-        pass
+        def runGraph(self):
+            with tf.Session() as sess, tf.device("/gpu:0") as dev:
+                try:
+                    pool5_in = self.reference_activations['pool5']
+                except KeyError:
+                    print("Warning:  pool5 not found in reference activations.  Something \
+                            wrong with .npz file")
+                
+                pool5 = tf.placeholder("float")
+                loadNetVars.extractLayers("rcnn", s.DEF_FRCNN_WEIGHTS_PATH, s.DEF_FRCNN_BIASES_PATH)
+                net = cls.setUp(pool5, 7, 7, 512, namespace="rcnn")
+                sess.run(tf.initialize_all_variables())
+                return sess.run(["rcnn/relu7:0"], feed_dict={pool5 : pool5_in})
+                
+        result = utils.isolatedFunctionRun(runGraph, False, self)[0]
+        return array_equality_assert(self, result, self.reference_activations['fc7'])
+
     
     def test_cls_score(self):
         """ Tests the cls_score layer via comarison to a reference activation"""
-        pass
+        def runGraph(self):
+            with tf.Session() as sess, tf.device("/gpu:0") as dev:
+                try:
+                    relu7_in = self.reference_activations['fc7']
+                except KeyError:
+                    print("Warning:  fc7 not found in reference activations.  Something \
+                            wrong with .npz file")
+                
+                loadNetVars.extractLayers("rcnn", s.DEF_FRCNN_WEIGHTS_PATH, s.DEF_FRCNN_BIASES_PATH)
+                net = cls.setUp(tf.placeholder("float", name="pool5"), 7, 7, 512, namespace="rcnn")
+                sess.run(tf.initialize_all_variables())
+                return sess.run(["rcnn/cls_score/out:0"], feed_dict={"rcnn/relu7:0" : relu7_in})
+                
+        result = utils.isolatedFunctionRun(runGraph, False, self)[0]
+        return array_equality_assert(self, result, self.reference_activations['cls_score'])
     
     def test_bbox_pred(self):
         """ Tests the bbox_pred layer via comparison to a reference activation"""
-        pass
+        def runGraph(self):
+            with tf.Session() as sess, tf.device("/gpu:0") as dev:
+                try:
+                    relu7_in = self.reference_activations['fc7']
+                except KeyError:
+                    print("warning:  fc7 not found in reference activations.  Something \
+                            wrong with .npz file")
+
+                loadNetVars.extractLayers("rcnn", s.DEF_FRCNN_WEIGHTS_PATH, s.DEF_FRCNN_BIASES_PATH)
+                net = cls.setUp(tf.placeholder("float", name="pool5"), 7, 7, 512, namespace="rcnn")
+                sess.run(tf.initialize_all_variables())
+                return sess.run(["rcnn/bbox_pred/out:0"], feed_dict={"rcnn/relu7:0" : relu7_in})
+
+        result = utils.isolatedFunctionRun(runGraph, False, self)[0]
+        return array_equality_assert(self, result, self.reference_activations['bbox_pred'])
 
 if __name__ == '__main__':
     unittest.main()

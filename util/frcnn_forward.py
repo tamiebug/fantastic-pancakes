@@ -92,7 +92,7 @@ def process_image(imPath):
 
     # resize image using ratio
     resized_image = cv2.resize(img, None, None,fx=ratio, fy=ratio, interpolation=cv2.INTER_LINEAR)
-    return resized_image, np.array([img.shape[1], img.shape[0], ratio])
+    return resized_image, np.array([img.shape[0], img.shape[1], ratio])
 
 def demo(img):
     """ Performs a forward pass through the Faster RCNN network.
