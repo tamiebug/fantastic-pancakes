@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 from util import settings as s
 from . import loadNetVars
+from util.utils import easy_scope
 
 def Rpn(features, image_attr, train=False, namespace="rpn"):
     """ Region proposal network.  Proposes regions to later be pooled and classified/regressed
@@ -29,16 +30,14 @@ def Rpn(features, image_attr, train=False, namespace="rpn"):
         # of the layer.  Expects a tf.Variable with name
         # model_scope/layer_scope/Weights and one with
         # model_scope/layer_scope/Bias to already exist.
-        with tf.variable_scope(name,reuse=True) as scope:
+        with easy_scope(name,reuse=True):
             scope.reuse_variables()
             prevLayer = tf.nn.conv2d(bottom, tf.get_variable("Weights"), stride,
                                      padding="SAME")
             prevLayer = tf.nn.bias_add(prevLayer, tf.get_variable("Bias"))
         return prevLayer
 
-    with tf.variable_scope(namespace,reuse=True) as model_scope:
-        model_scope.reuse_variables()
-
+    with easy_scope(namespace, reuse=True):
         layer3x3 = createConvLayer(features, "rpn_conv/3x3")
 
         # Region Proposal Network - Probabilities

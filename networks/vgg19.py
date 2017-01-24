@@ -2,15 +2,11 @@ import numpy
 import tensorflow as tf
 import util.settings as s
 import loadNetVars
-
+from util.utils import easy_scope
 
 class Vgg19(object):
-    def __init__(self, namespace="vgg19", unique_namespace=False):
+    def __init__(self, namespace="vgg19"):
         self.namespace = namespace
-        if isinstance(namespace, basestring) and not unique_namespace:
-            # Fixes issue of namespace not being reused.  This non reuse was not intended
-            if not self.namespace.endswith("/"):
-                self.namespace = namespace + "/"
 
     def buildGraph(self, img, train=False, weightsPath=s.DEF_WEIGHTS_PATH,
             biasesPath=s.DEF_BIASES_PATH, cutoff=[], device="/gpu:0"):
@@ -30,13 +26,13 @@ class Vgg19(object):
         loadNetVars.extractLayers(self.namespace, weightsPath, biasesPath)
         def createConvLayer(bottom, name, trainable=True):
             """
-            Creates a convolutional Tensorflow layer given its name.
+            Creates a convolutional Tensorflow ayer given its name.
         
             Name lookup occurs in the weightsDict and biasesDict in order to obtain the
             parameters to construct the layer
             """
 
-            with tf.variable_scope(name) as scope, tf.device(device) as dev:
+            with easy_scope(name), tf.device(device) as dev:
                 conv = tf.nn.conv2d(bottom, tf.get_variable(
                     "Weights"), [1, 1, 1, 1], padding="SAME")
                 bias = tf.nn.bias_add(conv, tf.get_variable("Bias"))
@@ -53,7 +49,7 @@ class Vgg19(object):
             INPUT_SIZE = 25088
             OUTPUT_SIZE = 4096
 
-            with tf.variable_scope(name, reuse=True) as scope, tf.device(device) as dev:
+            with easy_scope(name, reuse=True), tf.device(device) as dev:
                 flattenedInput = tf.reshape(bottom, [-1, INPUT_SIZE])
                 layer = tf.nn.bias_add(
                     tf.matmul(flattenedInput, tf.get_variable("Weights")), tf.get_variable("Bias"))
@@ -70,7 +66,7 @@ class Vgg19(object):
 
             INPUT_SIZE = 4096
 
-            with tf.variable_scope(name, reuse=True) as scope, tf.device(device) as dev:
+            with easy_scope(name, reuse=True), tf.device(device) as dev:
                 layer = tf.nn.bias_add(
                         tf.matmul(bottom, tf.get_variable("Weights")), tf.get_variable("Bias"))
 
@@ -85,12 +81,9 @@ class Vgg19(object):
                        'conv4_1', 'relu4_1', 'conv4_2', 'relu4_2', 'conv4_3', 'relu4_3', 'conv4_4', 'relu4_4', 'pool4',
                        'conv5_1', 'relu5_1', 'conv5_2', 'relu5_2', 'conv5_3', 'relu5_3', 'conv5_4', 'relu5_4', 'pool5']
 
-        with tf.variable_scope(self.namespace, reuse=True) as scope, tf.device(device) as dev:
+        with easy_scope(self.namespace, reuse=True), tf.device(device) as dev:
             # We start out with the input img
             prevLayer = img
-
-            # scope.reuse_variables() will be valid for all sub-scopes as well!
-            scope.reuse_variables()
 
             for layername in layerNames:
                 if layername in cutoff:
