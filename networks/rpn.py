@@ -31,14 +31,14 @@ def Rpn(features, image_attr, train=False, namespace="rpn"):
         # model_scope/layer_scope/Weights and one with
         # model_scope/layer_scope/Bias to already exist.
         with easy_scope(name,reuse=True):
-            scope.reuse_variables()
             prevLayer = tf.nn.conv2d(bottom, tf.get_variable("Weights"), stride,
                                      padding="SAME")
-            prevLayer = tf.nn.bias_add(prevLayer, tf.get_variable("Bias"))
+            prevLayer = tf.nn.bias_add(prevLayer, tf.get_variable("Bias"), name="out")
         return prevLayer
 
     with easy_scope(namespace, reuse=True):
         layer3x3 = createConvLayer(features, "rpn_conv/3x3")
+        layer3x3 = tf.nn.relu(layer3x3, "rpn_relu/3x3")
 
         # Region Proposal Network - Probabilities
         prevLayer = createConvLayer(layer3x3, "rpn_cls_score")
