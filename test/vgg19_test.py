@@ -365,17 +365,9 @@ class ClsTest(unittest.TestCase):
                     print("Warning: rois not found in reference activations.  Something \
                             wrong with .npz file")
 
-                im_info[2] = 1. / im_info[2] 
-   
-                fake_info = [1,1,8174652]
-
                 feats = tf.placeholder("float", [None,None,None])
                 rois_placeholder = tf.placeholder("float", [None,4])
                 info = tf.placeholder("float", [3])
-
-                # To see if anything is going on here at all 
-                # features = np.ones(features.shape)*0
-                rois = np.ones(rois.shape)*0
 
                 # 33.301205 is the diff you get if everything is zeroes.
 
@@ -387,9 +379,9 @@ class ClsTest(unittest.TestCase):
                                     16,# Feature Stride (16 for vgg)
                                     name='roi_pooling_layer') 
                 return sess.run(pool_layer, feed_dict={
-                    feats : np.squeeze(features,0)*2,
+                    feats : np.squeeze(features),
                     rois_placeholder : rois[:,[1,2,3,4]],
-                    info : fake_info
+                    info : im_info
                     })[0]
 
         result= utils.isolatedFunctionRun(runGraph, False, self, im_info)
