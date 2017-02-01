@@ -1,7 +1,7 @@
 CC = g++
 CFLAGS = -std=c++11 -shared -fPIC -O2
 
-TARGET = rpl
+TARGETS = rpl nms
 
 # Uncomment line before if compiling on OSX platform
 #CFLAGS += -undefined dynamic_lookup
@@ -12,9 +12,11 @@ CFLAGS += -D_GLIBCXX_USE_CXX11_ABI=0
 
 TENSORFLOW_INCLUDE_DIR := $(shell python -c 'import tensorflow as tf; print(tf.sysconfig.get_include())') 
 
-all: $(TARGET)
 
-$(TARGET): $(TARGET).cc
-		$(CC) $(CFLAGS) -o $(TARGET).so -I$(TENSORFLOW_INCLUDE_DIR) $(TARGET).cc
+all: $(TARGETS)
 
-clean: $(RM) $(TARGET).so
+$(TARGETS): % : %.cc
+		$(CC) $(CFLAGS) -o $@.so -I$(TENSORFLOW_INCLUDE_DIR) $@.cc
+
+.PHONY: clean
+clean: $(RM) $(TARGETS).so

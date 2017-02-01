@@ -7,3 +7,8 @@ dot_slash = os.path.dirname(__file__)
 roi_location = os.path.join(dot_slash,"rpl.so")
 op_module = tf.load_op_library(roi_location)
 roi_pooling_layer = op_module.roi_pooler
+
+# Maknig nms available for import as a library
+nms_location = os.path.join(dot_slash, "nms.so")
+nms_module = tf.load_op_library(nms_location)
+nms = nms_module.nms
