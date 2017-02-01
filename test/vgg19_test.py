@@ -93,9 +93,6 @@ class ModelOutputGenerator():
         """
         Returns a layer of name layername in either the tf or caffe model.
         """
-
-        print vars(self)
-
         if flavor == "caffe":
             caffeLayer = self.caffeTestLayers[self.testLayers.index(layername)]
             return self.coffee.blobs[caffeLayer].data
