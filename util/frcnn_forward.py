@@ -2,7 +2,9 @@ import tensorflow as tf
 import matplotlib.pyplot as plt
 from networks.vgg19 import Vgg19
 from util import settings as s
+from util.utils import easy_scope
 from layers.custom_layers import roi_pooling_layer
+from layers.custom_layers import nms
 from networks import cls
 from networks import rpn
 from util import utils
@@ -31,6 +33,7 @@ def faster_rcnn(image, image_attributes):
     pooled_w = 7
     feature_channels = 512 # Property of vgg16 network
     num_classes = 21
+    condifence_threshold = 0.8
 
     vgg16_base = Vgg19('frcnn')
     vgg16_base.buildGraph(image, train=False,
@@ -44,37 +47,47 @@ def faster_rcnn(image, image_attributes):
     proposed_regions, rpn_scores = rpn.Rpn(features, image_attributes,
                                     train=False, namespace='frcnn')
     print("Region Proposal Network set up!")
-    """
-    with tf.variable_scope('frcnn') as scope:
-        pooled_regions = roi_pooling_layer(features, image_attributes, proposed_regions, 
+
+    with easy_scope('frcnn'):
+        pooled_regions = roi_pooling_layer(features, proposed_regions, 
                                         pooled_h, pooled_w, 16,name='roi_pooling_layer')[0]
     print("RoI pooling set up!")
     bbox_reg, cls_scores = cls.setUp(pooled_regions, pooled_h, pooled_w, feature_channels,
                                         namespace="frcnn")
+    
+    # cls_score is (300,21) ; bbox_reg is (300,84)
     bbox_reg = tf.reshape(bbox_reg, (-1, 21, 4))
 
-    bbox_regs = tf.unpack(bbox_reg, num=21, axis=1)
-    bbox_scores = tf.unpack(cls_scores, num=21, axis=1)
+    # set proposed_regions shape to (300,1,4)
+    proposed_regions_reshape = tf.expand_dims(proposed_regions, dim=1)
+    reg_roi = rpn.regressAnchors(proposed_regions_reshape, bbox_reg, axis=-1)
 
-    cls_det_list = []
+    # Clip all regions to image boundaries
+    reg_roi = rpn.clipRegions(reg_roi, img_attributes,axis=2)
 
-    for regs, scores in izip(bbox_regs, bbox_scores):
-        inds = tf.image.non_max_suppression(regs, scores, 21, iou_threshold=0.3)
-        # Selects rows given by inds
-        inds = tf.expand_dims(inds,dim=1)
-        sel_regs =  tf.gather_nd(regs, inds)
-        sel_proposed_regs = tf.gather_nd(proposed_regions, inds)
-        # Produce regressed regions
-        sel_regressed_regs = rpn.regressAnchors(sel_proposed_regs, sel_regs, axis=1)
-        sel_scores = tf.gather_nd(scores, inds)
-        # Modify for concatenation purposes
-        sel_scores = tf.expand_dims(sel_scores, dim=1)
-        cls_dets = tf.concat(1, [sel_regs, sel_scores])
-        cls_det_list.append(cls_dets)
+    # Throw away everything not meeting a certain score threshold
+    geq_indices = tf.greater_equal(cls_scores, [confidence_threshold])
+    reg_roi = tf.gather_nd(reg_roi, geq_indices)
+    cls_scores = tf.gather_nd(cls_scores geq_indices)
+    
+    # Unapck both the regions and scores by class.
+    reg_rois = tf.unpack(reg_roi, num=21, axis=1)
+    bbox_scores = tf.unpack(cls_scores, num=21, axis=1) 
+        
+    # There are 20 classes, each in their own list.  Background is not stored
+    out_scores = [[] for _ in xrange(20)]
+    out_regions = [[] for _ in xrange(20)]
 
-    return bbox_reg, cls_scores, proposed_regions, rpn_scores, cls_det_list
-    """
-    return features, proposed_regions, rpn_scores
+    # We skip the first class since it is the background class.
+    for i, (regs, scores) in enumerate(izip(reg_rois, bbox_scores)[1:]):
+        # Perform NMS, but keep all of the indices (#indices < 300)
+        inds = nms(regs, scores, 300, iou_threshold=0.3)
+        regs = tf.gather_nd(regs, inds)
+        scores = tf.gather_nd(scores, inds)
+        out_scores[i] = scores 
+        out_regions[i] = regs
+
+    return out_regions, out_scores
 
 def process_image(imPath):
     """ Loads and preprocesses an image located in path 'image'"""
