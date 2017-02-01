@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+from layers.custom_layers import nms
 from util import settings as s
 from . import loadNetVars
 from util.utils import easy_scope
@@ -48,21 +49,28 @@ def Rpn(features, image_attr, train=False, namespace="rpn"):
 
         # However,a tf.nn.conv2d cannot create batches out of thin air.  Hence, the
         # rpn_cls_score should create a (1, 14, 14, 9*2) instead, which we reshape to
-        # (1, 14, 14, 9, 2), transpose to (9, 14, 14, 2, 1), then tf.squeeze the last
+        # (1, 14, 14, 2, 9), transpose to (9, 14, 14, 2, 1), then tf.squeeze the last
         # dimension out to arrive at the desired wonderful shape of (9, 14, 14,
-        # 2)
+        # 2).  The last dimension of rpn_cls_score is unpacked from (9*2) to (2,9) and
+        # not (9,2) since this is how the weights imported from caffe are packed.
 
         feature_h = tf.gather_nd(tf.shape(features), [1])
         feature_w = tf.gather_nd(tf.shape(features), [2])
 
-        prevLayer = tf.reshape(prevLayer, (1, feature_h, feature_w, 9, 2))
-        prevLayer = tf.transpose(prevLayer, (3, 1, 2, 4, 0))
-        prevLayer = tf.squeeze(prevLayer, squeeze_dims=[4])
-        _ = tf.unpack(prevLayer, axis=3)
-        # The dimension on which softmax is performed is automatically the last
-        # one
-        rpnScores  = tf.nn.softmax(prevLayer, name="rpn_cls_prob")
-        _ = tf.unpack(prevLayer, axis=3) 
+        prevLayer = tf.reshape(prevLayer, (1, feature_h, feature_w, 2, 9))
+        prevLayer = tf.transpose(prevLayer, (4, 1, 2, 3, 0))
+        prevLayer = tf.squeeze(prevLayer)
+
+        prevLayer = tf.reshape(prevLayer, (-1,2))
+
+        rpnScores  = tf.nn.softmax(prevLayer,dim=-1, name="rpn_cls_prob_raw")
+        rpnScores = tf.identity(rpnScores, name="wtf")
+
+        rpnScores = tf.reshape(rpnScores, (9, feature_h, feature_w, 2))
+
+        _ , rpnScores = tf.unpack(rpnScores, num=2, axis=-1)
+
+        rpnScores = tf.identity(rpnScores, name="rpn_cls_prob")
         # Region Proposal Network - Bounding Box Proposal Regression
         rpnBboxPred = createConvLayer(layer3x3, "rpn_bbox_pred")
         
@@ -137,93 +145,91 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
     baseAnchors = generateAnchors(ratios=[2, 1, .5])
 
     shiftedAnchors = generateShiftedAnchors(baseAnchors, feature_h, feature_w,
-            feature_stride, img_attr)
+            feature_stride)
 
     regressedAnchors = regressAnchors(shiftedAnchors, bbox_regressions)
 
-    # TODO remove debug lines(2)
-    tf.identity(regressedAnchors, name="REGRESSED_ANCHORS")
+    clippedAnchors = clipRegions(regressedAnchors, img_attr)
+
+    p_anchors, p_scores = prunedScoresAndAnchors(clippedAnchors, 
+            scores, minimum_dim, img_attr)
+
+    pre_nms_keep = 6000
+    top_scores, top_score_indices = tf.nn.top_k(p_scores, k=pre_nms_keep, name="top_scores")
+
+    # Modifying the top_score_indices to be able to be properly used with gather_nd
+    top_score_indices = tf.cast(top_score_indices, tf.int32, name="top_score_indices")
+    top_score_indices = tf.expand_dims(top_score_indices, axis=1, name="top_score_indices_expanded")
+    top_anchors = tf.gather_nd(p_anchors, top_score_indices, name="top_anchors")
+
+    # TODO: Remove below op.  For debug purposes only
+    top_anchors = tf.identity(top_anchors, name="top_anchors_id")
+    top_scores = tf.identity(top_scores, name="top_scores_id")
     
-    clippedAnchors = clipRegions(regressedAnchors, img_attr, feature_stride)
+    # We want nms to keep everything that passes the IoU test
+    post_nms_indices = nms(top_anchors, top_scores,
+                        post_nms_keep, iou_threshold=iou_threshold, name="post_nms_indices")
 
-    # We're gonna try this, but with unclipped anchors
-    p_anchors, p_scores = prunedScoresAndAnchors(regressedAnchors, 
-            scores, minimum_dim)
-
-    # TODO remove debug lines(2)
-    tf.reshape(tf.unpack(scores, num=2,axis=3)[1], [-1], name="DEBUG_2")
-    tf.identity(clippedAnchors, name="DEBUG_clippedAnchors")
-
-    # Assuming the foreground score is the second one,
-    _, fg_scores = tf.unpack(p_scores,num=2,axis=1)
-    # TODO remove debug line(2)
-    fg_scores = tf.identity(fg_scores, name="DEBUG_1")
-    tf.identity(p_anchors, name="DEBUG_prunedAnchors")
-
-    # Current Error location.  Scores not large enough?
-    top_scores, top_score_indices = tf.nn.top_k(fg_scores, k=pre_nms_keep)
-    top_anchors = tf.gather_nd(p_anchors, top_score_indices)
-
-    # These reshapes are not required, we're already there
-
-    # Changing shape into form [num_boxes,4] as required by
-    # tf.image.non_max_suppression
-    # top_anchors_reshaped = tf.reshape(top_anchors, (-1, 4))
-
-    # Might not need to reshape scores, might need to reshape scores.
-    #top_scores_reshaped = tf.reshape(top_scores, [-1])
-
-    # The gather_nd operation in prunedScoresAndAnchors already flattens to the last dimension
-    post_nms_indices = tf.image.non_max_suppression(top_anchors, top_scores,
-                                                    post_nms_keep, iou_threshold=iou_threshold)
-
-    final_anchors = tf.gather_nd(top_anchors, post_nms_indices, name='proposal_regions')
+    # Expanding nms_indices for use with tf.gather_nd
+    post_nms_indices = tf.expand_dims(post_nms_indices, axis=1, name="post_nms_indices_expanded")
+    final_anchors = tf.gather_nd(top_anchors, post_nms_indices, 
+            name='proposal_regions')
     final_scores = tf.gather_nd(top_scores, post_nms_indices, 
                                     name='proposal_region_scores')
 
     return final_anchors, final_scores
 
 
-def prunedScoresAndAnchors(anchors, scores, minimum_dim):
+def prunedScoresAndAnchors(anchors, scores, minimum_dim, im_attr):
     """ Return list of anchors and scores larger than a given minimum size
 
         It is assumed that the shape of scores is (numAnchors, feat_h, feat_w, 2)
         We output tensors of shape (?,2) for scores_gathered and (?,4) for
         anchors_gathered
     """
-    x1, y1, x2, y2 = tf.unpack(anchors, num=4, axis=3)
+    anchors = tf.transpose(anchors, (1,2,0,3))
+    scores = tf.transpose(scores, (1,2,0))
+    anchors = tf.reshape(anchors, (-1,4))
+    scores = tf.reshape(scores, (-1,))
 
-    w = tf.sub(x2, x1)
-    h = tf.sub(y2, y1)
+    x1, y1, x2, y2 = tf.unpack(anchors, num=4, axis=-1)
 
-    minimum_dim = 16
+    w = tf.sub(x2, x1) + 1.
+    h = tf.sub(y2, y1) + 1.
 
-    width_suffices = tf.greater_equal(w, tf.constant([minimum_dim], dtype=tf.float32), 
+    # Gotta scale the minimum_dim by the scale factor before use
+    minimum_dim = tf.constant([s.DEF_MIN_PROPOSAL_DIMS], dtype=tf.float32)
+    minimum_dim = tf.mul(minimum_dim, tf.gather_nd(im_attr, [2]))
+
+    width_suffices = tf.greater_equal(w, minimum_dim, 
             name="geqw")
-    height_suffices = tf.greater_equal(h, tf.constant([minimum_dim], dtype=tf.float32) ,
+    height_suffices = tf.greater_equal(h, minimum_dim,
             name="geqh")
 
     both_suffice = tf.logical_and(width_suffices, height_suffices)
     indices = tf.where(both_suffice)
 
     # The actual grabbing of indexed values happens here 
-    anchors_gathered = tf.gather_nd(anchors, indices)
-    scores_gathered = tf.gather_nd(scores, indices)
+    anchors_gathered = tf.gather_nd(anchors, indices, name="pruned_anchors")
+    scores_gathered = tf.gather_nd(scores, indices, name="pruned_scores")
     return anchors_gathered, scores_gathered
 
 
-def clipRegions(anchors, img_attr, feature_stride):
+def clipRegions(anchors, img_attr, axis=3):
     """ Clip anchors so that all lie entirely within image """
 
-    feature_stride = tf.constant(feature_stride, dtype=tf.float32)
     # Input anchors will be of shape
     # (numBaseAnchors, feature_h, feature_w, 4)
-    x1, y1, x2, y2 = tf.unpack(anchors,num=4,axis=3)
+    x1, y1, x2, y2 = tf.unpack(anchors,num=4,axis=axis)
 
     zero = tf.constant([0.])
     # img_attr = (img_h, img_w, scaling_factor)
-    max_x = [tf.gather_nd(img_attr, [1], name="clip_img_w")]
-    max_y = [tf.gather_nd(img_attr, [0], name="clip_img_h")]
+
+    
+    max_x = [tf.sub(tf.gather_nd(img_attr, [1]) * tf.gather_nd(img_attr, [2])
+        , tf.constant([1.]), name="clip_img_w")]
+    max_y = [tf.sub(tf.gather_nd(img_attr, [0]) * tf.gather_nd(img_attr, [2])
+        , tf.constant([1.]), name="clip_img_h")]
 
     x1_clipped = tf.minimum(tf.maximum(zero, x1), max_x)
     x2_clipped = tf.minimum(tf.maximum(zero, x2), max_x)
@@ -231,11 +237,11 @@ def clipRegions(anchors, img_attr, feature_stride):
     y2_clipped = tf.minimum(tf.maximum(zero, y2), max_y)
 
     # Pack 'em back up
-    retVal = tf.pack([x1_clipped, y1_clipped, x2_clipped, y2_clipped], 3)
+    retVal = tf.pack([x1_clipped, y1_clipped, x2_clipped, y2_clipped], axis, name="clipped_anchors")
 
     return retVal
 
-def generateShiftedAnchors(anchors, feature_h, feature_w, feature_stride, image_attr):
+def generateShiftedAnchors(anchors, feature_h, feature_w, feature_stride):
     """ Generate shifted anchors to be regressed into the final RPN output
 
     A score is created for every anchor at each feature.  Using feature_stride,
@@ -245,31 +251,31 @@ def generateShiftedAnchors(anchors, feature_h, feature_w, feature_stride, image_
     feature_w * feature_h * len(anchors) anchors.
     """
    
-    scaling_factor = tf.gather_nd(image_attr, [2])
+    # The scaling factor I seek is actually the reciprocal, since I want
+    # to transform back to original image coordinates, not go from img coords
+    # to input coordinates
     feature_stride = tf.constant(feature_stride, dtype=tf.float32)
-    # I need to reinterpret these as floats
-
     x_locations = tf.to_float(tf.range(0, feature_w))
     y_locations = tf.to_float(tf.range(0, feature_h))
 
     x_zeros = tf.zeros([feature_w])
     y_zeros = tf.zeros([feature_h])
 
-    x_stack = tf.pack([x_locations, x_zeros, x_locations, x_zeros], 1)
-    y_stack = tf.pack([y_zeros, y_locations, y_zeros, y_locations], 1)
+    x_stack = tf.pack([x_locations, x_zeros, x_locations, x_zeros], axis=1)
+    y_stack = tf.pack([y_zeros, y_locations, y_zeros, y_locations], axis=1)
 
     x_reshaped_stack = tf.reshape(x_stack, (1, 1, feature_w, 4))
     y_reshaped_stack = tf.reshape(y_stack, (1, feature_h, 1, 4))
 
     # I <3 broadcasting
     raw_anchor_shifts = tf.add(x_reshaped_stack, y_reshaped_stack)
-    less_raw_anchor_shifts = scaling_factor * raw_anchor_shifts
 
-    anchor_shifts = feature_stride * less_raw_anchor_shifts
+    # Transform to scaled image coordinates
+    less_raw_anchor_shifts = feature_stride * raw_anchor_shifts
+
     # Add extra dimensions to anchors for proper broadcasting
-    expanded_anchors = tf.expand_dims(tf.expand_dims(tf.constant(anchors),dim=1),dim=1)
-
-    return anchor_shifts + expanded_anchors
+    expanded_anchors = tf.expand_dims(tf.expand_dims(tf.constant(anchors),dim=1),dim=1) - [1.]
+    return tf.add(less_raw_anchor_shifts, expanded_anchors, name="shifted_anchors")
 
 
 def regressAnchors(anchors, bbox_regression, axis=3):
@@ -293,10 +299,10 @@ def regressAnchors(anchors, bbox_regression, axis=3):
 
     # We must get the anchors into the same width/height x/y format as the
     # bbox_regressions
-    x = tf.div(tf.add(x1, x2), tf.constant([2.]))
-    y = tf.div(tf.add(y1, y2), tf.constant([2.]))
     w = tf.add(tf.sub(x2, x1), tf.constant([1.]))
     h = tf.add(tf.sub(y2, y1), tf.constant([1.]))
+    x = tf.add(tf.div(w, tf.constant([2.])), x1)
+    y = tf.add(tf.div(h, tf.constant([2.])), y1)
 
     # The dx and dy given by the regression must be scaled by w and h and added
     # to the anchors
@@ -315,7 +321,8 @@ def regressAnchors(anchors, bbox_regression, axis=3):
     y2_final = tf.add(y_new, tf.mul(tf.constant([.5]), h_new))
 
     # Stack our anchors back up
-    regressedAnchors = tf.pack([x1_final, y1_final, x2_final, y2_final], 3)
+    regressedAnchors = tf.pack([x1_final, y1_final, x2_final, y2_final], 3,
+            name="regressed_anchors")
 
     # The output shape is the same as the input shape;  Output shape is
     # regressedAnchors.shape = (numBaseAnchors, feature_h, feature_w, 4)
