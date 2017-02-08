@@ -68,7 +68,7 @@ def faster_rcnn(image, image_attributes):
     # Throw away everything not meeting a certain score threshold
     geq_indices = tf.greater_equal(cls_scores, [confidence_threshold])
     reg_roi = tf.gather_nd(reg_roi, geq_indices)
-    cls_scores = tf.gather_nd(cls_scores geq_indices)
+    cls_scores = tf.gather_nd(cls_scores, geq_indices)
     
     # Unapck both the regions and scores by class.
     reg_rois = tf.unpack(reg_roi, num=21, axis=1)

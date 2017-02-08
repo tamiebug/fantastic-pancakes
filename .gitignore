@@ -69,3 +69,7 @@ tens/
 
 #.swp files from vim
 *.swp
+*.swo
+
+# Auxiliary files
+/aux_files

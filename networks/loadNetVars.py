@@ -35,12 +35,21 @@ def extractLayers(scope, weightsPath, biasesPath, device="/cpu:0"):
     # Here, we do a for loop looping through all of the names, "name".
     with tf.device(device) as dev:
         with easy_scope(scope) as model_scope:
+            warning = False
             for name, weights_tnsr in weightsDict.iteritems():    
                 if name.startswith("/"):
                     name = name[1:]
                 if name.endswith("/"):
                     name = name[:-1]
                 with easy_scope(name) as layer_scope:
-                    tf.get_variable("Weights", trainable=False, initializer=tf.constant(weights_tnsr))
-                    tf.get_variable("Bias", trainable=False, initializer=tf.constant(biasesDict[name]))
+                    try:
+                        tf.get_variable("Weights", trainable=False, initializer=tf.constant(weights_tnsr))
+                        tf.get_variable("Bias", trainable=False, initializer=tf.constant(biasesDict[name]))
+                    except ValueError:
+                        # Values were loaded elsewhere
+                        warning = True
+            if warning:
+                print("extractLayers()  Warning : Some variable names already exist."+
+                        "  If unintentional, please choose a different scope name.")
+            
     return

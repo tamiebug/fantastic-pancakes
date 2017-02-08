@@ -237,8 +237,8 @@ def easy_scope(name, *args, **kwargs):
     # If we don't want to reuse, then don't massage the scopes.  Normal behavoir suffices
     if "reuse" in kwargs:
         if kwargs["reuse"]==False:
-            with tf.variable_scope(name, *args, **kwargs):
-                yield
+            with tf.variable_scope(name, *args, **kwargs) as scope:
+                yield scope
     
     # Not part of the public API, may be broken by an update
     try:
@@ -254,6 +254,6 @@ def easy_scope(name, *args, **kwargs):
     if not curr_scope=="":
         new_name = curr_scope + "/" + new_name
 
-    with tf.variable_scope(name, *args, **kwargs):
+    with tf.variable_scope(name, *args, **kwargs) as scope:
         with tf.name_scope(new_name):
-            yield
+            yield scope
