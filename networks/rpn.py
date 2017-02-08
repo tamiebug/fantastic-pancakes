@@ -162,10 +162,6 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
     top_score_indices = tf.expand_dims(top_score_indices, axis=1, name="top_score_indices_expanded")
     top_anchors = tf.gather_nd(p_anchors, top_score_indices, name="top_anchors")
 
-    # TODO: Remove below op.  For debug purposes only
-    top_anchors = tf.identity(top_anchors, name="top_anchors_id")
-    top_scores = tf.identity(top_scores, name="top_scores_id")
-    
     # We want nms to keep everything that passes the IoU test
     post_nms_indices = nms(top_anchors, top_scores,
                         post_nms_keep, iou_threshold=iou_threshold, name="post_nms_indices")
@@ -194,17 +190,15 @@ def prunedScoresAndAnchors(anchors, scores, minimum_dim, im_attr):
 
     x1, y1, x2, y2 = tf.unpack(anchors, num=4, axis=-1)
 
-    w = tf.sub(x2, x1) + 1.
-    h = tf.sub(y2, y1) + 1.
+    w = x2 - x1 + 1.
+    h = y2 - y1 + 1.
 
     # Gotta scale the minimum_dim by the scale factor before use
     minimum_dim = tf.constant([s.DEF_MIN_PROPOSAL_DIMS], dtype=tf.float32)
-    minimum_dim = tf.mul(minimum_dim, tf.gather_nd(im_attr, [2]))
+    minimum_dim = minimum_dim * im_attr[2]
 
-    width_suffices = tf.greater_equal(w, minimum_dim, 
-            name="geqw")
-    height_suffices = tf.greater_equal(h, minimum_dim,
-            name="geqh")
+    width_suffices = tf.greater_equal(w, minimum_dim, name="geqw")
+    height_suffices = tf.greater_equal(h, minimum_dim,name="geqh")
 
     both_suffice = tf.logical_and(width_suffices, height_suffices)
     indices = tf.where(both_suffice)
@@ -223,13 +217,9 @@ def clipRegions(anchors, img_attr, axis=3):
     x1, y1, x2, y2 = tf.unpack(anchors,num=4,axis=axis)
 
     zero = tf.constant([0.])
-    # img_attr = (img_h, img_w, scaling_factor)
-
     
-    max_x = [tf.sub(tf.gather_nd(img_attr, [1]) * tf.gather_nd(img_attr, [2])
-        , tf.constant([1.]), name="clip_img_w")]
-    max_y = [tf.sub(tf.gather_nd(img_attr, [0]) * tf.gather_nd(img_attr, [2])
-        , tf.constant([1.]), name="clip_img_h")]
+    max_x = [tf.sub(img_attr[1] * img_attr[2], tf.constant([1.]), name="clip_img_w")]
+    max_y = [tf.sub(img_attr[0] * img_attr[2], tf.constant([1.]), name="clip_img_h")]
 
     x1_clipped = tf.minimum(tf.maximum(zero, x1), max_x)
     x2_clipped = tf.minimum(tf.maximum(zero, x2), max_x)
@@ -299,26 +289,26 @@ def regressAnchors(anchors, bbox_regression, axis=3):
 
     # We must get the anchors into the same width/height x/y format as the
     # bbox_regressions
-    w = tf.add(tf.sub(x2, x1), tf.constant([1.]))
-    h = tf.add(tf.sub(y2, y1), tf.constant([1.]))
-    x = tf.add(tf.div(w, tf.constant([2.])), x1)
-    y = tf.add(tf.div(h, tf.constant([2.])), y1)
+    w = x2 - x1 + [1.]
+    h = y2 - y1 + [1.]
+    x = w / [2.] + x1
+    y = h / [2.] + y1
 
     # The dx and dy given by the regression must be scaled by w and h and added
     # to the anchors
-    x_new = tf.add(tf.mul(dx, w), x)
-    y_new = tf.add(tf.mul(dy, h), y)
+    x_new = dx*w + x
+    y_new = dy*h + y
 
     # Since logarithms of the values in question are easier to learn (no regression means
     # a logarithm of the change being zero), we learn the logarithms of h, w.
-    w_new = tf.mul(tf.exp(dw), w)
-    h_new = tf.mul(tf.exp(dh), h)
+    w_new = tf.exp(dw) * w
+    h_new = tf.exp(dh) * h
 
     # Transform back to the original (x1,y1,x2,y2) coordinate system
-    x1_final = tf.sub(x_new, tf.mul(tf.constant([.5]), w_new))
-    y1_final = tf.sub(y_new, tf.mul(tf.constant([.5]), h_new))
-    x2_final = tf.add(x_new, tf.mul(tf.constant([.5]), w_new))
-    y2_final = tf.add(y_new, tf.mul(tf.constant([.5]), h_new))
+    x1_final = x_new - [.5] * w_new
+    y1_final = y_new - [.5] * h_new
+    x2_final = x_new + [.5] * w_new
+    y2_final = y_new + [.5] * h_new
 
     # Stack our anchors back up
     regressedAnchors = tf.pack([x1_final, y1_final, x2_final, y2_final], 3,
