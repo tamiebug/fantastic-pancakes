@@ -6,6 +6,10 @@ import unittest
 from .testUtils import eval_cpu, eval_gpu
 from layers.custom_layers import roi_pooling_layer
 
+# RoiPoolingLayer needs an image attributes input to extract a scale factor from
+# These tests assume the scaling is 1, so we use the following
+dummy_img_attr = np.array([1.,1.,1.])
+
 def createDiagFeatures(width=16, height=16, channels=1, dtype=np.float32,
         asNumpyArray=False, inverted=(False,False,False)):
     ''' Creates a tf.constant tensor with consecutively numbered values '''
@@ -52,7 +56,7 @@ class shapesTest(tf.test.TestCase):
     def test_shape_A(self):
         regions = tf.constant([[0.,0.,2.,2.],[4.,6.,10.,10.]])
         feat_map = tf.random_normal((4,5,6))
-        op = roi_pooling_layer(feat_map, regions, 7, 8, 16)
+        op = roi_pooling_layer(feat_map, dummy_img_attr, regions, 7, 8, 16)
         result = eval_cpu(op,self)
         self.assertEqual(result[0].shape, (2, 7, 8, 6),
                 "expected %s, got %s"%(str((2,7,8,4)), str(result[0].shape)))
@@ -60,7 +64,7 @@ class shapesTest(tf.test.TestCase):
     def test_shape_B(self):
         regions = tf.constant([[33.,109.,204., 19,]])
         feat_map = createDiagFeatures(width=16,height=16,channels=1)
-        op = roi_pooling_layer(feat_map, regions, 2, 2, 16)
+        op = roi_pooling_layer(feat_map, dummy_img_attr, regions, 2, 2, 16)
         result = eval_cpu(op,self)
         self.assertEqual(result[0].shape, (1,2,2,1), "Got %s"%str(result[0].shape))
 
@@ -68,7 +72,7 @@ class paramsTest(tf.test.TestCase):
     def test_params_A(self):
         regions = tf.constant([[0.,0.,2.,2.],[4.,6.,10.,10.]])
         feat_map = tf.random_normal((4,5,6))
-        op = roi_pooling_layer(feat_map, regions, 7, 8, 16)
+        op = roi_pooling_layer(feat_map, dummy_img_attr, regions, 7, 8, 16)
         result = eval_cpu(op,self)
         self.assertEqual(result[2][0][0], 2., str(result[2][0][0]) )
         self.assertEqual(result[2][0][1], 4., str(result[2][0][1]) )
@@ -82,7 +86,7 @@ class paramsTest(tf.test.TestCase):
 class singleRegionOutputTest(tf.test.TestCase):
     def single_roi_test_template(self, features, expectation):       
         regions = tf.constant([[33.,19.,204.,109.]])
-        op =  roi_pooling_layer(features, regions, 2, 2, 16)
+        op =  roi_pooling_layer(features, dummy_img_attr, regions, 2, 2, 16)
         result = eval_cpu(op, self)
         self.assertEqual(result[0].shape, (1, 2, 2, 1), "Shape incorrect.  Expected %s,\
             but got %s"%(str((1,2,2,1)),str(result[0].shape)))
