@@ -209,7 +209,7 @@ def prunedScoresAndAnchors(anchors, scores, minimum_dim, im_attr):
     return anchors_gathered, scores_gathered
 
 
-def clipRegions(anchors, img_attr, axis=3):
+def clipRegions(anchors, img_attr, axis=-1):
     """ Clip anchors so that all lie entirely within image """
 
     # Input anchors will be of shape
@@ -268,7 +268,7 @@ def generateShiftedAnchors(anchors, feature_h, feature_w, feature_stride):
     return tf.add(less_raw_anchor_shifts, expanded_anchors, name="shifted_anchors")
 
 
-def regressAnchors(anchors, bbox_regression, axis=3):
+def regressAnchors(anchors, bbox_regression, axis=-1):
     """ Given preliminary bounding boxes, regress them to their final location
 
     The bounding box regressions are outputs of convolutional layers and of
@@ -311,7 +311,7 @@ def regressAnchors(anchors, bbox_regression, axis=3):
     y2_final = y_new + [.5] * h_new
 
     # Stack our anchors back up
-    regressedAnchors = tf.pack([x1_final, y1_final, x2_final, y2_final], 3,
+    regressedAnchors = tf.pack([x1_final, y1_final, x2_final, y2_final], axis,
             name="regressed_anchors")
 
     # The output shape is the same as the input shape;  Output shape is
