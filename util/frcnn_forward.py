@@ -23,17 +23,16 @@ def faster_rcnn(image, image_attributes):
         image_attribures- tf.Tensor object containing image height, width, and
                             scaling factor used to resize original image
     Outputs:
-        bboxes          - tf.Tensor object with bounding boxes for detections
-        cls_scores      - tf.Tensor object with classification scores for each
-                            category in VOC 2007
-        rpn_scores      - tf.Tensor with objectness scores, ranking each detection's
-                            likelihood to be an object.
+        out_regions     - list of tf.Tensor objects with bounding boxes for detections, 
+                            sans background class
+        out_scores      - list of tf.Tensor objects with classification scores for each
+                            category in VOC 2007, sans background
     """
     pooled_h = 7
     pooled_w = 7
     feature_channels = 512 # Property of vgg16 network
     num_classes = 21
-    condifence_threshold = 0.8
+    confidence_threshold = 0.8
 
     vgg16_base = Vgg19('frcnn')
     vgg16_base.buildGraph(image, train=False,
@@ -49,7 +48,7 @@ def faster_rcnn(image, image_attributes):
     print("Region Proposal Network set up!")
 
     with easy_scope('frcnn'):
-        pooled_regions = roi_pooling_layer(features, proposed_regions, 
+        pooled_regions = roi_pooling_layer(tf.squeeze(features), image_attributes, proposed_regions, 
                                         pooled_h, pooled_w, 16,name='roi_pooling_layer')[0]
     print("RoI pooling set up!")
     bbox_reg, cls_scores = cls.setUp(pooled_regions, pooled_h, pooled_w, feature_channels,
@@ -58,19 +57,19 @@ def faster_rcnn(image, image_attributes):
     # cls_score is (300,21) ; bbox_reg is (300,84)
     bbox_reg = tf.reshape(bbox_reg, (-1, 21, 4))
 
-    # set proposed_regions shape to (300,1,4)
+    # Set proposed_regions shape to (300,1,4)
     proposed_regions_reshape = tf.expand_dims(proposed_regions, dim=1)
+
+    # Rescale the Regions of Interest to the proper scale
+    proposed_regions_reshape = proposed_regions_reshape / image_attributes[2]
+
+    # Regress the Regions of Interest into class-specific detection boxes
     reg_roi = rpn.regressAnchors(proposed_regions_reshape, bbox_reg, axis=-1)
 
     # Clip all regions to image boundaries
-    reg_roi = rpn.clipRegions(reg_roi, img_attributes,axis=2)
-
-    # Throw away everything not meeting a certain score threshold
-    geq_indices = tf.greater_equal(cls_scores, [confidence_threshold])
-    reg_roi = tf.gather_nd(reg_roi, geq_indices)
-    cls_scores = tf.gather_nd(cls_scores, geq_indices)
+    reg_roi = rpn.clipRegions(reg_roi, image_attributes, axis=-1)
     
-    # Unapck both the regions and scores by class.
+    # Unpack both the regions and scores by class
     reg_rois = tf.unpack(reg_roi, num=21, axis=1)
     bbox_scores = tf.unpack(cls_scores, num=21, axis=1) 
         
@@ -79,14 +78,13 @@ def faster_rcnn(image, image_attributes):
     out_regions = [[] for _ in xrange(20)]
 
     # We skip the first class since it is the background class.
-    for i, (regs, scores) in enumerate(izip(reg_rois, bbox_scores)[1:]):
+    for i, (regs, scores) in enumerate(izip(reg_rois[1:], bbox_scores[1:])):
         # Perform NMS, but keep all of the indices (#indices < 300)
         inds = nms(regs, scores, 300, iou_threshold=0.3)
-        regs = tf.gather_nd(regs, inds)
-        scores = tf.gather_nd(scores, inds)
+        regs = tf.gather(regs, inds)
+        scores = tf.gather(scores, inds)
         out_scores[i] = scores 
         out_regions[i] = regs
-
     return out_regions, out_scores
 
 def process_image(imPath):
@@ -119,108 +117,79 @@ def demo(img):
                         in the pascal VOC dataset
     """
 
-    net_img_input = tf.placeholder( "float", name="image_input" )
-    net_img_attr_input = tf.placeholder( "float" , name="image_attr" )
-    image, image_attr = process_image(img) 
+    net_img_input = tf.placeholder("float", name="image_input")
+    net_img_attr_input = tf.placeholder("float" , name="image_attr")
     
     print("Checking for weights/biases, downloading them if they do not exist...")
-    #utils.downloadFasterRcnn()
+    utils.downloadFasterRcnn()
 
     
     # The three variables to the left are tensor objects that will contain the values we
     # want to extract from the network
     print("Setting up Faster R-CNN...")
-    features, rpn_regions, rpn_scores = faster_rcnn(net_img_input, net_img_attr_input)
+    out_regions, out_scores = faster_rcnn(net_img_input, net_img_attr_input)
 
     output = []
-
-    def find_ops_output_in_list(operations,ops_list):
-        ret = []
-        for full_op in ops_list:
-            for op in operations:
-                if op in full_op.name:
-                    ret.append(full_op.name + ":0")
-        return ret
-            
-    with tf.Session() as sess :
-        with tf.device("/cpu:0") as dev:
-            ops = sess.graph.get_operations()
-            sess.run(tf.initialize_all_variables())
-            for op in ops:
-                #print(op.name)
-                pass
-
-            opsWanted = ['DEBUG_1']
-            output = sess.run(  #find_ops_output_in_list(opsWanted, ops).append(rpn_scores),
-                                [rpn_regions, rpn_scores],
-                                feed_dict = {   net_img_input: np.expand_dims(image,0),
-                                                net_img_attr_input : image_attr }
-    
-                            )
-        print("printing op results from ops in {} for debugging".format(opsWanted))
-        print output[0]
-        print output[1]
-
-    def num_trues(array, txt):
-        count = 0
-        for ele in np.nditer(array):
-            if ele:
-                count += 1
-        print("{} had {} trues out of {} elements".format(txt, count, array.size))
-
-    """
+    with tf.Session() as sess:
+        image, image_attr = process_image(img)
+        image = np.expand_dims(image, 0)
+        sess.run(tf.initialize_all_variables())
+        output = sess.run([out_regions, out_scores], 
+                feed_dict={net_img_input : image, net_img_attr_input : image_attr})
     print("Faster R-CNN successfully run")
-
     print("Generating visualizations...")
 
     # Code adapted from py-faster-rcnn/test/demo.py
-
     classes = ( '__background__',
                 'airplane', 'bicycle', 'bird', 'boat',
                 'bottle', 'bus', 'car', 'cat', 'chair',
                 'cow', 'diningtable', 'dog', 'horse',
                 'motorbike', 'person', 'pottedplant',
                 'sheep', 'sofa', 'train', 'tvmonitor')
-    for _class, cls_detections in izip(classes, output[4]):
-        if _class == '__background__':
-            continue
-        draw_boxes(img, cls_detections, _class)
-        
-    """
+    draw_boxes(img, output[0], output[1], classes[1:])
     
-def draw_boxes(img, detections, name, thresh=0.8):
-    """ Draw detected bounding boxes 
-        Adapted from Faster R-CNN function vis_detections
+def draw_boxes(img, regions, scores, names, thresh=0.5):
+    """ 
+    Draw detected bounding boxes 
+    Adapted from Faster R-CNN function vis_detections
+
+    Inputs:
+        img     - Input image to be classified
+        regions - Object detection regions in the image
+        scores  - Object detection scores for regions in the image
+        names   - Class names
     """
-    inds = np.where(detections[:,-1] >= thresh)[0]
-    if len(inds) == 0:
-        return
 
     fig, ax = plt.subplots(figsize=(12,12))
-    ax.imshow(img, aspect='equal')
-    for i in inds:
-        bbox = detections[i, :4]
-        score = detections[i, -1]
-        
-        ax.add_patch(
-                plt.Rectangle((bbox[0], bbox[1]),
-                    bbox[2] - bbox[0],
-                    bbox[3] - bbox[1], fill=False,
-                    edgecolor='red', linewidth=3.5)
-                )
-        ax.text(bbox[0], bbox[1] - 2,
-                '{:s} {:.3f}'.format(return_class(cls_scores), scores),
-                bbox=dict(facecolor='blue', alpha=0.5),
-                fontsize=14, color='white')
+    ax.imshow(skimage.io.imread(img), aspect='equal')
 
-        ax.set_title(('{} detections with '
-                        'p({} | box) >= {:.1f}').format(name, name, thresh),
-                        fontsize=14)
-        plt.axis('off')
-        plt.tight_layout()
-        plt.draw()
+    total_detections = 0
+    print("Shapes are {} , {} , and {}".format(len(regions), len(scores), len(names)))
+    
+    for class_regions, class_scores, class_name in izip(regions, scores, names):
+        inds = np.where(np.greater_equal(class_scores, thresh))[0]
+        if len(inds) == 0:
+            continue
+        for bbox, score in izip(class_regions[inds], class_scores[inds]):
+            total_detections += 1
+            ax.add_patch(
+                    plt.Rectangle((bbox[0], bbox[1]),
+                        bbox[2] - bbox[0],
+                        bbox[3] - bbox[1], fill=False,
+                        edgecolor='red', linewidth=3.5)
+                    )
+            ax.text(bbox[0], bbox[1] - 2,
+                    '{:s} {:.3f}'.format(class_name, score),
+                    bbox=dict(facecolor='blue', alpha=0.5),
+                    fontsize=14, color='white')
+
+    ax.set_title(('{} detections with '
+                    'p(class | box) >= {:.1f}').format(total_detections, thresh),
+                    fontsize=14)
+    plt.axis('off')
+    plt.tight_layout()
+    plt.draw()
+    plt.show()
 
 if __name__ == '__main__':
     demo(sys.argv[1])
-
-
