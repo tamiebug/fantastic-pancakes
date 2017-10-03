@@ -11,7 +11,7 @@ from util import utils
 import skimage.transform
 import numpy as np
 import sys
-from itertools import izip
+
 import networks.loadNetVars
 import cv2
 
@@ -58,7 +58,7 @@ def faster_rcnn(image, image_attributes):
     bbox_reg = tf.reshape(bbox_reg, (-1, 21, 4))
 
     # Set proposed_regions shape to (300,1,4)
-    proposed_regions_reshape = tf.expand_dims(proposed_regions, dim=1)
+    proposed_regions_reshape = tf.expand_dims(proposed_regions, axis=1)
 
     # Rescale the Regions of Interest to the proper scale
     proposed_regions_reshape = proposed_regions_reshape / image_attributes[2]
@@ -70,15 +70,15 @@ def faster_rcnn(image, image_attributes):
     reg_roi = rpn.clipRegions(reg_roi, image_attributes, axis=-1)
     
     # Unpack both the regions and scores by class
-    reg_rois = tf.unpack(reg_roi, num=21, axis=1)
-    bbox_scores = tf.unpack(cls_scores, num=21, axis=1) 
+    reg_rois = tf.unstack(reg_roi, num=21, axis=1)
+    bbox_scores = tf.unstack(cls_scores, num=21, axis=1) 
         
     # There are 20 classes, each in their own list.  Background is not stored
-    out_scores = [[] for _ in xrange(20)]
-    out_regions = [[] for _ in xrange(20)]
+    out_scores = [[] for _ in range(20)]
+    out_regions = [[] for _ in range(20)]
 
     # We skip the first class since it is the background class.
-    for i, (regs, scores) in enumerate(izip(reg_rois[1:], bbox_scores[1:])):
+    for i, (regs, scores) in enumerate(zip(reg_rois[1:], bbox_scores[1:])):
         # Perform NMS, but keep all of the indices (#indices < 300)
         inds = nms(regs, scores, 300, iou_threshold=0.3)
         regs = tf.gather(regs, inds)
@@ -93,6 +93,7 @@ def process_image(imPath):
     scaleToMax = 1000.
 
     img = skimage.io.imread(imPath)
+    #img = np.load("/home/tamie/Downloads/rawest_img.npz")['arr_0']
     img = img - np.array(s.FRCNN_MEAN)
     shorterDim = np.argmin(img.shape[:-1])
     longerDim = 0 if shorterDim==1 else 1
@@ -133,7 +134,7 @@ def demo(img):
     with tf.Session() as sess:
         image, image_attr = process_image(img)
         image = np.expand_dims(image, 0)
-        sess.run(tf.initialize_all_variables())
+        sess.run(tf.global_variables_initializer())
         output = sess.run([out_regions, out_scores], 
                 feed_dict={net_img_input : image, net_img_attr_input : image_attr})
     print("Faster R-CNN successfully run")
@@ -164,13 +165,13 @@ def draw_boxes(img, regions, scores, names, thresh=0.5):
     ax.imshow(skimage.io.imread(img), aspect='equal')
 
     total_detections = 0
-    print("Shapes are {} , {} , and {}".format(len(regions), len(scores), len(names)))
+    print(("Shapes are {} , {} , and {}".format(len(regions), len(scores), len(names))))
     
-    for class_regions, class_scores, class_name in izip(regions, scores, names):
+    for class_regions, class_scores, class_name in zip(regions, scores, names):
         inds = np.where(np.greater_equal(class_scores, thresh))[0]
         if len(inds) == 0:
             continue
-        for bbox, score in izip(class_regions[inds], class_scores[inds]):
+        for bbox, score in zip(class_regions[inds], class_scores[inds]):
             total_detections += 1
             ax.add_patch(
                     plt.Rectangle((bbox[0], bbox[1]),

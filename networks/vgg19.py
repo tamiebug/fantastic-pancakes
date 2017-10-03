@@ -1,7 +1,7 @@
 import numpy
 import tensorflow as tf
 import util.settings as s
-import loadNetVars
+from . import loadNetVars
 from util.utils import easy_scope
 
 class Vgg19(object):
@@ -98,8 +98,8 @@ class Vgg19(object):
                 elif layername.startswith('relu'):
                     self.layers[layername] = tf.nn.relu(prevLayer, layername)
                 else:
-                    print(
-                        "Error in layerNames in vgg19.py.  %s was not a conv, relu, nor pool" % layername)
+                    print((
+                        "Error in layerNames in vgg19.py.  %s was not a conv, relu, nor pool" % layername))
                 prevLayer = self.layers[layername]
 
             if not ('fc6' in cutoff):
@@ -157,7 +157,7 @@ class Vgg19(object):
 
         weightsVar = []
         biasVar = []
-        for var in tf.all_variables():
+        for var in tf.global_variables():
             if var.name.startswith(self.namespace):
                 if "Weights" in var.name:
                     weightsVar.append(var)
@@ -165,13 +165,13 @@ class Vgg19(object):
                     biasVar.append(var)
         fullVarList = biasVar + weightsVar
         with tf.Session() as sess:
-            sess.run(tf.initialize_all_variables())
+            sess.run(tf.global_variables_initializer())
             output = sess.run(fullVarList)
 
         theDict = {var.name: output[i] for i, var in enumerate(fullVarList)}
         weightsDict = {}
         biasDict = {}
-        for key, val in theDict.iteritems():
+        for key, val in theDict.items():
             if "Weights" in key:
                 weightsDict[key.split(self.namespace)
                             [-1].split('/Weights:0')[0]] = val

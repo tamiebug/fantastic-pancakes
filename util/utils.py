@@ -3,7 +3,7 @@ import caffe
 import tensorflow as tf
 from . import settings as s
 
-from urllib import urlretrieve
+from urllib.request import urlretrieve
 import threading
 import os
 import skimage.io
@@ -68,7 +68,7 @@ def downloadFasterRcnn():
     if filesExist:
         print ("Faster RCNN files already exist.  Delete them if you wish to re-download")
         return;
-    #urlretrieve(s.DEF_FRCNN_DL, s.DEF_FRCNN_PATH)
+    urlretrieve(s.DEF_FRCNN_DL, s.DEF_FRCNN_PATH)
     tar = tarfile.open(s.DEF_FRCNN_PATH)
     tar.extractall()
     tar.close()
@@ -87,13 +87,13 @@ def fasterCoffeeMachine(prototxtPath=s.DEF_FRCNN_PROTOTXT_PATH, caffemodelPath=s
     
     # Extract Caffe weights and biases
     coffee = caffe.Net(prototxtPath, caffemodelPath, caffe.TEST)
-    caffeVggWeights = { name: blobs[0].data for name, blobs in coffee.params.iteritems() }
-    caffeVggBiases = { name: blobs[1].data for name, blobs in coffee.params.iteritems() }
+    caffeVggWeights = { name: blobs[0].data for name, blobs in coffee.params.items() }
+    caffeVggBiases = { name: blobs[1].data for name, blobs in coffee.params.items() }
     
     # There are a few conv layers without "conv" in name, but treated the same
     devious_convs = ["rpn_cls_score","rpn_bbox_pred"]
     for name in caffeVggWeights:
-        print("{} : {}".format(name, caffeVggWeights[name].shape))
+        print(("{} : {}".format(name, caffeVggWeights[name].shape)))
         # As before, the conv layers are all identically processed.
         if ("conv" in name) or (name in devious_convs) :
             # Tensorflow order  : [ width, height, in_channels, out_channels ]
@@ -121,7 +121,7 @@ def fasterCoffeeMachine(prototxtPath=s.DEF_FRCNN_PROTOTXT_PATH, caffemodelPath=s
             # Caffe order		: [out_channels, in_channels]
             caffeVggWeights[name] = caffeVggWeights[name].transpose((1,0))
         else:
-            print("Warning, following layer not being saved: {}".format(name))
+            print(("Warning, following layer not being saved: {}".format(name)))
     numpy.savez(s.DEF_FRCNN_WEIGHTS_PATH, **caffeVggWeights)
     numpy.savez(s.DEF_FRCNN_BIASES_PATH, **caffeVggBiases)
     print("Coffee successfully brewed")
@@ -133,8 +133,8 @@ def coffeeMachine(prototxtPath=s.DEF_PROTOTXT_PATH, caffemodelPath=s.DEF_CAFFEMO
     """	
     # Extract Caffe weights and biases
     coffee = caffe.Net(prototxtPath, caffemodelPath, caffe.TEST)
-    caffeVggWeights = { name: blobs[0].data for name, blobs in coffee.params.iteritems() }
-    caffeVggBiases = { name: blobs[1].data for name, blobs in coffee.params.iteritems() }
+    caffeVggWeights = { name: blobs[0].data for name, blobs in coffee.params.items() }
+    caffeVggBiases = { name: blobs[1].data for name, blobs in coffee.params.items() }
 
     for name in caffeVggWeights:
         if "conv" in name:
@@ -165,11 +165,11 @@ def coffeeMachine(prototxtPath=s.DEF_PROTOTXT_PATH, caffemodelPath=s.DEF_CAFFEMO
             
         else:
             # Error in loading model, raise exception
-            raise StandardError("Warning, model being saved as .npz file has non-standard field names")
+            raise Exception("Warning, model being saved as .npz file has non-standard field names")
             
     numpy.savez(s.DEF_WEIGHTS_PATH, **caffeVggWeights)
     numpy.savez(s.DEF_BIASES_PATH, **caffeVggBiases)
-    print "Coffee successfully brewed"
+    print("Coffee successfully brewed")
 
 def isolatedFunctionRun(func, textSuppress, *args, **kwargs):
     """

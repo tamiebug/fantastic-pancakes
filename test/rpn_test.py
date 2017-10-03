@@ -1,5 +1,5 @@
 import unittest
-from itertools import izip
+
 import os
 
 import numpy as np
@@ -33,8 +33,8 @@ class generateAnchorsTest(unittest.TestCase):
 			[ -79.0, -167.0,   96.0,  184.0],
 			[-167.0, -343.0,  184.0,  360.0]]
 
-		for rowOut, rowExp in izip(output,expected):
-			for eleOut, eleExp in izip(rowOut,rowExp):
+		for rowOut, rowExp in zip(output,expected):
+			for eleOut, eleExp in zip(rowOut,rowExp):
 				self.assertAlmostEqual(eleOut,eleExp, places=5)
 
 class RpnTest(unittest.TestCase):
@@ -71,7 +71,7 @@ class RpnTest(unittest.TestCase):
                 net = rpn.Rpn(features, info, namespace="rcnn")
                 #for op in tf.get_default_graph().get_operations():
                 #    print op.name
-                sess.run(tf.initialize_all_variables())
+                sess.run(tf.global_variables_initializer())
                 return sess.run(["rcnn/rpn_cls_score/out:0"], feed_dict={
                     features : features_activations, info : self.im_info})
 
@@ -93,7 +93,7 @@ class RpnTest(unittest.TestCase):
                 info = tf.placeholder("float", [3])
                 loadNetVars.extractLayers("rcnn", s.DEF_FRCNN_WEIGHTS_PATH, s.DEF_FRCNN_BIASES_PATH)
                 net = rpn.Rpn(features, info, namespace="rcnn")
-                sess.run(tf.initialize_all_variables())
+                sess.run(tf.global_variables_initializer())
                 return sess.run(["rcnn/rpn_bbox_pred/out:0"], 
                         feed_dict={features : features_activations, info : self.im_info})
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
@@ -118,7 +118,7 @@ class RpnTest(unittest.TestCase):
                 info = tf.placeholder("float", [3])
                 loadNetVars.extractLayers("rcnn", s.DEF_FRCNN_WEIGHTS_PATH, s.DEF_FRCNN_BIASES_PATH)
                 net = rpn.Rpn(features, info, namespace="rcnn")
-                sess.run(tf.initialize_all_variables())
+                sess.run(tf.global_variables_initializer())
                 return sess.run(["rcnn/proposal_regions:0"], feed_dict={
                     features : self.reference_activations['conv5_3'], # isn't really used
                     'rcnn/rpn_cls_score/out:0' : score_activations,

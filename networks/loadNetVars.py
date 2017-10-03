@@ -36,7 +36,7 @@ def extractLayers(scope, weightsPath, biasesPath, device="/cpu:0"):
     with tf.device(device) as dev:
         with easy_scope(scope) as model_scope:
             warning = False
-            for name, weights_tnsr in weightsDict.iteritems():    
+            for name, weights_tnsr in weightsDict.items():    
                 if name.startswith("/"):
                     name = name[1:]
                 if name.endswith("/"):
@@ -49,7 +49,7 @@ def extractLayers(scope, weightsPath, biasesPath, device="/cpu:0"):
                         # Values were loaded elsewhere
                         warning = True
             if warning:
-                print("extractLayers()  Warning : Some variable names already exist."+
-                        "  If unintentional, please choose a different scope name.")
+                print(("extractLayers()  Warning : Some variable names already exist."+
+                        "  If unintentional, please choose a different scope name."))
             
     return

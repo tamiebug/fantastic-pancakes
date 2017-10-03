@@ -20,7 +20,7 @@ DEF_CATNAMES_PATH = add_root("models/synset.txt")
 DEF_CAFFEMODEL_DL = "http://www.robots.ox.ac.uk/~vgg/software/very_deep/caffe/VGG_ILSVRC_19_layers.caffemodel"
 DEF_PROTOTXT_DL = "https://gist.githubusercontent.com/ksimonyan/3785162f95cd2d5fee77/raw/f02f8769e64494bcd3d7e97d5d747ac275825721/VGG_ILSVRC_19_layers_deploy.prototxt25721/VGG_ILSVRC_19_layers_deploy.prototxt"
 
-DEF_FRCNN_DL = "https://people.eecs.berkeley.edu/~rbg/faster-rcnn-data/faster_rcnn_models.tgz"
+DEF_FRCNN_DL = "https://dl.dropboxusercontent.com/s/o6ii098bu51d139/faster_rcnn_models.tgz?dl=0"
 DEF_FRCNN_PATH = add_root("models/faster_rcnn_models.tgz")
 DEF_FRCNN_CAFFEMODEL_PATH = add_root( 
         "models/faster_rcnn_models/VGG16_faster_rcnn_final.caffemodel")

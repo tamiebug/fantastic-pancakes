@@ -88,7 +88,7 @@ class ClsTest(unittest.TestCase):
                 pool5 = tf.placeholder("float")
                 loadNetVars.extractLayers("rcnn", s.DEF_FRCNN_WEIGHTS_PATH, s.DEF_FRCNN_BIASES_PATH)
                 net = cls.setUp(pool5, 7, 7, 512, namespace="rcnn")
-                sess.run(tf.initialize_all_variables())
+                sess.run(tf.global_variables_initializer())
                 return sess.run(["rcnn/relu7:0"], feed_dict={pool5 : pool5_in})
                 
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
@@ -107,7 +107,7 @@ class ClsTest(unittest.TestCase):
                 
                 loadNetVars.extractLayers("rcnn", s.DEF_FRCNN_WEIGHTS_PATH, s.DEF_FRCNN_BIASES_PATH)
                 net = cls.setUp(tf.placeholder("float", name="pool5"), 7, 7, 512, namespace="rcnn")
-                sess.run(tf.initialize_all_variables())
+                sess.run(tf.global_variables_initializer())
                 return sess.run(["rcnn/cls_score/out:0"], feed_dict={"rcnn/relu7:0" : relu7_in})
                 
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
@@ -125,7 +125,7 @@ class ClsTest(unittest.TestCase):
 
                 loadNetVars.extractLayers("rcnn", s.DEF_FRCNN_WEIGHTS_PATH, s.DEF_FRCNN_BIASES_PATH)
                 net = cls.setUp(tf.placeholder("float", name="pool5"), 7, 7, 512, namespace="rcnn")
-                sess.run(tf.initialize_all_variables())
+                sess.run(tf.global_variables_initializer())
                 return sess.run(["rcnn/bbox_pred/out:0"], feed_dict={"rcnn/relu7:0" : relu7_in})
 
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]

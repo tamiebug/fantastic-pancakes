@@ -68,7 +68,7 @@ def Rpn(features, image_attr, train=False, namespace="rpn"):
 
         rpnScores = tf.reshape(rpnScores, (9, feature_h, feature_w, 2))
 
-        _ , rpnScores = tf.unpack(rpnScores, num=2, axis=-1)
+        _ , rpnScores = tf.unstack(rpnScores, num=2, axis=-1)
 
         rpnScores = tf.identity(rpnScores, name="rpn_cls_prob")
         # Region Proposal Network - Bounding Box Proposal Regression
@@ -188,7 +188,7 @@ def prunedScoresAndAnchors(anchors, scores, minimum_dim, im_attr):
     anchors = tf.reshape(anchors, (-1,4))
     scores = tf.reshape(scores, (-1,))
 
-    x1, y1, x2, y2 = tf.unpack(anchors, num=4, axis=-1)
+    x1, y1, x2, y2 = tf.unstack(anchors, num=4, axis=-1)
 
     w = x2 - x1 + 1.
     h = y2 - y1 + 1.
@@ -214,12 +214,12 @@ def clipRegions(anchors, img_attr, axis=-1):
 
     # Input anchors will be of shape
     # (numBaseAnchors, feature_h, feature_w, 4)
-    x1, y1, x2, y2 = tf.unpack(anchors,num=4,axis=axis)
+    x1, y1, x2, y2 = tf.unstack(anchors,num=4,axis=axis)
 
     zero = tf.constant([0.])
     
-    max_x = [tf.sub(img_attr[1] * img_attr[2], tf.constant([1.]), name="clip_img_w")]
-    max_y = [tf.sub(img_attr[0] * img_attr[2], tf.constant([1.]), name="clip_img_h")]
+    max_x = [tf.subtract(img_attr[1] * img_attr[2], tf.constant([1.]), name="clip_img_w")]
+    max_y = [tf.subtract(img_attr[0] * img_attr[2], tf.constant([1.]), name="clip_img_h")]
 
     x1_clipped = tf.minimum(tf.maximum(zero, x1), max_x)
     x2_clipped = tf.minimum(tf.maximum(zero, x2), max_x)
@@ -227,7 +227,7 @@ def clipRegions(anchors, img_attr, axis=-1):
     y2_clipped = tf.minimum(tf.maximum(zero, y2), max_y)
 
     # Pack 'em back up
-    retVal = tf.pack([x1_clipped, y1_clipped, x2_clipped, y2_clipped], axis, name="clipped_anchors")
+    retVal = tf.stack([x1_clipped, y1_clipped, x2_clipped, y2_clipped], axis, name="clipped_anchors")
 
     return retVal
 
@@ -251,8 +251,8 @@ def generateShiftedAnchors(anchors, feature_h, feature_w, feature_stride):
     x_zeros = tf.zeros([feature_w])
     y_zeros = tf.zeros([feature_h])
 
-    x_stack = tf.pack([x_locations, x_zeros, x_locations, x_zeros], axis=1)
-    y_stack = tf.pack([y_zeros, y_locations, y_zeros, y_locations], axis=1)
+    x_stack = tf.stack([x_locations, x_zeros, x_locations, x_zeros], axis=1)
+    y_stack = tf.stack([y_zeros, y_locations, y_zeros, y_locations], axis=1)
 
     x_reshaped_stack = tf.reshape(x_stack, (1, 1, feature_w, 4))
     y_reshaped_stack = tf.reshape(y_stack, (1, feature_h, 1, 4))
@@ -264,7 +264,7 @@ def generateShiftedAnchors(anchors, feature_h, feature_w, feature_stride):
     less_raw_anchor_shifts = feature_stride * raw_anchor_shifts
 
     # Add extra dimensions to anchors for proper broadcasting
-    expanded_anchors = tf.expand_dims(tf.expand_dims(tf.constant(anchors),dim=1),dim=1) - [1.]
+    expanded_anchors = tf.expand_dims(tf.expand_dims(tf.constant(anchors),axis=1),axis=1) - [1.]
     return tf.add(less_raw_anchor_shifts, expanded_anchors, name="shifted_anchors")
 
 
@@ -284,8 +284,8 @@ def regressAnchors(anchors, bbox_regression, axis=-1):
     # (Actually, we're going to assume that the regressions are ALSO in the form
     # (numBaseAnchors, feat_h, feat_w, 4) !  This can be enforced at another stage.
 
-    x1, y1, x2, y2 = tf.unpack(anchors,num=4, axis=axis)
-    dx, dy, dw, dh = tf.unpack(bbox_regression,num=4, axis=axis)
+    x1, y1, x2, y2 = tf.unstack(anchors,num=4, axis=axis)
+    dx, dy, dw, dh = tf.unstack(bbox_regression,num=4, axis=axis)
 
     # We must get the anchors into the same width/height x/y format as the
     # bbox_regressions
@@ -311,7 +311,7 @@ def regressAnchors(anchors, bbox_regression, axis=-1):
     y2_final = y_new + [.5] * h_new
 
     # Stack our anchors back up
-    regressedAnchors = tf.pack([x1_final, y1_final, x2_final, y2_final], axis,
+    regressedAnchors = tf.stack([x1_final, y1_final, x2_final, y2_final], axis,
             name="regressed_anchors")
 
     # The output shape is the same as the input shape;  Output shape is

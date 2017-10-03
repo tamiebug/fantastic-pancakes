@@ -20,12 +20,11 @@ import random
 import unittest
 
 
-class ModelOutputGenerator():
+class ModelOutputGenerator(metaclass=utils.Singleton):
     """
     Singleton class that loads tensorflow and caffe models into memory for testing.
     Tensorflow is loaded using a separate thread to avoid locking the GPU
     """
-    __metaclass__ = utils.Singleton
 
     def __init__(self):
         # Layer activations that we are going to test
@@ -52,7 +51,7 @@ class ModelOutputGenerator():
 
                     images = images.reshape((1, 224, 224, 3))
 
-                    sess.run(tf.initialize_all_variables())
+                    sess.run(tf.global_variables_initializer())
                     # print self.model.layers.keys()
                     self.output = sess.run([model.layers[_] for _ in self.testLayers],
                                            feed_dict={img: images})
@@ -88,7 +87,7 @@ class ModelOutputGenerator():
 
         # Running Caffe in its own thread to avoid conflicts
         utils.isolatedFunctionRun(runCaffe, True, self=self, images=images)
-        print "We did runCaffe, yes!"
+        print("We did runCaffe, yes!")
 
     def returnBlob(self, layername, flavor):
         """
@@ -182,7 +181,7 @@ class Vgg19SavingTest(unittest.TestCase):
         # Find the weights and biases for several layers in a model
         try:
             with tf.Session() as sess:
-                sess.run(tf.initialize_all_variables())
+                sess.run(tf.global_variables_initializer())
                 output = sess.run(testLayerVariables)
                 randNum = None
                 # Save the weights/biases in a file
@@ -200,7 +199,7 @@ class Vgg19SavingTest(unittest.TestCase):
             model2.buildGraph(img, train=False, weightsPath="models/" +
                               weightsFn + ".npz", biasesPath="models/" + biasFn + ".npz")
             with tf.Session() as sess:
-                sess.run(tf.initialize_all_variables())
+                sess.run(tf.global_variables_initializer())
                 output2 = sess.run(testLayerVariables)
             self.assertEqual(len(output2), 2 * len(testLayers),
                              msg="Incorrect number of output layers")
@@ -217,7 +216,7 @@ class Vgg19SavingTest(unittest.TestCase):
 class Vgg16Test(unittest.TestCase):
     """
     Loads the modified vgg16 base model, which is lacking the final fully-connected layers, ending
-    on relu5_3.  It will be tested on the image 000456.jpg in the images subfolder of test, 
+    on relu5_3.  It will be tested on the image 000456.png in the images subfolder of test, 
     activations and shapes of conv4_1 and conv5_3 compared with the reference model.
     """
 
@@ -230,7 +229,7 @@ class Vgg16Test(unittest.TestCase):
     def test_relu4_1(self):
         """ Tests whether the activations for relu4_1 match a given reference activation. """
         im_data, _ = frcnn_forward.process_image(
-                os.path.join(self.base_dir, "images/000456.jpg"))
+                os.path.join(self.base_dir, "images/000456.png"))
         im_data = np.expand_dims(im_data, axis=0)
 
         def runGraph(self, im):
@@ -251,7 +250,7 @@ class Vgg16Test(unittest.TestCase):
                     cutoff=cutoffs
                     )
 
-                sess.run(tf.initialize_all_variables())
+                sess.run(tf.global_variables_initializer())
                 output = sess.run(net.layers['relu4_1'], feed_dict={img:im_data})
                 sess.close()
                 # Does output come in list form if only one output is produced? [probably]
@@ -296,12 +295,43 @@ class Vgg16Test(unittest.TestCase):
                     biasesPath=s.DEF_FRCNN_BIASES_PATH,
                     cutoff=cutoffs
                     )
-                sess.run(tf.initialize_all_variables())
+                sess.run(tf.global_variables_initializer())
                 output = sess.run(net.layers['relu5_3'], feed_dict={conv4_1 : conv4_1_in})
                 sess.close()
                 return array_equality_assert(self, np.expand_dims(output[0],0), self.reference_activations['conv5_3'])
 
         return self.assertTrue(utils.isolatedFunctionRun(runGraph, False, self=self))
+
+    def test_whole_network(self):
+        """ Tests whether the activations for relu5_3 match a given reference activationstarting at input """
+        im_data, _ = frcnn_forward.process_image(
+                os.path.join(self.base_dir, "images/000456.png"))
+        im_data = np.expand_dims(im_data, axis=0)
+
+        def runGraph(self, im):
+            with tf.Session() as sess, tf.device("/gpu:0") as dev:
+                img = tf.placeholder(
+                    "float", im_data.shape, name="images")
+                net = vgg19.Vgg19("vgg16test_3") 
+                    # These are the layers of VGG19 we don't use when making a VGG16 network
+                vgg16_cutoffs = ['conv3_4', 'relu3_4', 'conv4_4', 'relu4_4', 'conv5_4', 'relu5_4',
+                                'pool5','fc6','relu6','fc7', 'relu7', 'fc8', 'prob']
+                cutoffs = vgg16_cutoffs
+                net.buildGraph(img, train=False,
+                    weightsPath=s.DEF_FRCNN_WEIGHTS_PATH,
+                    biasesPath=s.DEF_FRCNN_BIASES_PATH,
+                    cutoff=cutoffs
+                    )
+
+                sess.run(tf.global_variables_initializer())
+                output = sess.run(net.layers['relu5_3'], feed_dict={img:im_data})
+                sess.close()
+                # Does output come in list form if only one output is produced? [probably]
+                # Blob name is conv4_1, not relu4_1; relu is done in-place by caffe
+                return array_equality_assert(self, np.expand_dims(output[0],0), self.reference_activations['conv5_3'])
+
+        return self.assertTrue( utils.isolatedFunctionRun( runGraph, False, self=self, im=im_data) )
+
 
 if __name__ == '__main__':
     unittest.main() 

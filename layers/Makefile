@@ -1,4 +1,4 @@
-CC = g++
+CC = gcc
 CFLAGS = -std=c++11 -shared -fPIC -O2
 
 TARGETS = rpl nms
