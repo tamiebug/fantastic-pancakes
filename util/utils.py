@@ -1,15 +1,42 @@
 import numpy
-import caffe
 import tensorflow as tf
 from . import settings as s
+import skimage.io
+import skimage.transform
+import tarfile
 
 from urllib.request import urlretrieve
 import threading
 import os
-import skimage.io
-import skimage.transform
-import tarfile
+from functools import partial
 from contextlib import contextmanager
+
+def genProgressBar(**kwargs):
+    """ 
+    Generates a _progressBar callback with given named arguments
+    
+    Possible named argument options:
+        name:
+            Name of file to be downloaded (default is "file")
+        symbol:
+            Symbol used in download bar (default is '#')
+        barSize:
+            Size of download bar (default is 50)
+    
+    Returns:
+        progressBar callback to be used with the likes of urlrequest
+    """
+    def _progressBar(blockCount, blockSize, fileSize, name="file", symbol='#', barSize=50):
+        """ Simple, customizable progress bar for downloads """
+        totalBlocks = -(-fileSize // blockSize) # Integer division rounded up
+        ratioComplete = blockCount / totalBlocks
+        print("Downloading {} : [{}{}]%".format(name,
+                symbol * int(ratioComplete * barSize),
+                ' ' * (barSize - int(ratioComplete * barSize)),
+                int(ratioComplete * 100)), end="\r")
+        return
+    
+    return partial(_progressBar, **kwargs)
 
 class Singleton(type):
     """ Simple Singleton for use as metaclass """
@@ -23,7 +50,8 @@ class Singleton(type):
 def loadImage(imgPath):
     """ 
     Loads an image from imgPath, crops the center square, and subtracts the RGB
-    values from VGG_MEAN
+    values from VGG_MEAN.  Not to be used for Faster-RCNN, but rather for VGG19/16
+    by itself.
     """
     img = skimage.io.imread(imgPath)
     # We now need to crop the center square from our image
@@ -42,19 +70,34 @@ def loadImage(imgPath):
     rescaledImg[:,:,1] -= s.VGG_MEAN[1]
     rescaledImg[:,:,2] -= s.VGG_MEAN[0]
     return rescaledImg
-	
+
+def grabFasterRCNNParams(weights_path=s.DEF_FRCNN_WEIGHTS_NPZ_DL,
+        biases_path=s.DEF_FRCNN_BIASES_NPZ_DL, download_anyway=False):
+    """ Downloads and saves .npz files for Faster RCNN weights and biases """
+    
+    weights_destination = s.DEF_FRCNN_WEIGHTS_PATH
+    biases_destination = s.DEF_FRCNN_BIASES_PATH
+    
+    from os.path import isfile
+    
+    if not isfile(weights_destination) or download_anyway:
+        urlretrieve(weights_path, weights_destination, 
+                genProgBar(name="Faster RCNN weights"))
+
+    if not isfile(biases_destination) or download_anyway:
+        urlretrieve(biases_path, biases_destination,
+                genProgBar(name="Faster RCNN biases"))
+    return
+
 def downloadModel():
     """
     Download the vgg19 model (.caffemodel and .prototxt) files and save them to the
     DEF_CAFFEMODEL_PATH and DEF_PROTOTXT_PATH directories
     """
-    # prototxt for the vgg19 model
-    def progressBar(blockCount, blockSize, fileSize):
-        # Progress bar for download, passed to urlretrieve
-        return
-
-    urlretrieve(s.DEF_CAFFEMODEL_DL, s.DEF_CAFFEMODEL_PATH, progressBar)
-    urlretrieve(s.DEF_PROTOTXT_DL, s.DEF_PROTOTXT_PATH, progressBar)
+    urlretrieve(s.DEF_CAFFEMODEL_DL, s.DEF_CAFFEMODEL_PATH,
+            genProgBar(name="VGG19 caffemodel"))
+    urlretrieve(s.DEF_PROTOTXT_DL, s.DEF_PROTOTXT_PATH,
+            genProgBar(name="VGG19 prototxt"))
     return
 
 def downloadFasterRcnn():
@@ -209,12 +252,12 @@ def isolatedFunctionRun(func, textSuppress, *args, **kwargs):
 
     return output['return_val']
 
-def init_vgg16(namespace=None):
+def init_vgg16(namespace=None, train=False):
     if namespace==None:
         vgg16_base = Vgg19()
     else:
         vgg16_base = Vgg19(namespace)
-    vgg16_base.buildGraph(image, train=False,
+    vgg16_base.buildGraph(image, train=train,
             weightsPath=s.DEF_FRCNN_WEIGHTS_PATH,
             biasesPath=s.DEF_FRCNN_BIASES_PATH,
             cutoff=['conv3_4', 'relu3_4', 'conv4_4', 'relu4_4', 'conv5_4', 'relu5_4',
@@ -234,7 +277,7 @@ def easy_scope(name, *args, **kwargs):
     the reuse keyword is not set to False.
     """
     
-    # If we don't want to reuse, then don't massage the scopes.  Normal behavoir suffices
+    # If we don't want to reuse, then don't massage the scopes.  Normal behavior suffices
     if "reuse" in kwargs:
         if kwargs["reuse"]==False:
             with tf.variable_scope(name, *args, **kwargs) as scope:

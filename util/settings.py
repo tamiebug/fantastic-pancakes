@@ -33,6 +33,10 @@ DEF_TEST_IMAGE_PATHS = [add_root( "test/images/Cat.jpg"),
                         add_root( "test/images/EnglishSetter.jpg"),
                         add_root( "test/images/KitFox.jpg")]
 
+DEF_FRCNN_WEIGHTS_NPZ_DL="https://www.dropbox.com/s/9nhuutq0prhdu7w/VGG16_faster_rcnn_weights.npz?dl=0"
+DEF_FRCNN_BIASES_NPZ_DL="https://www.dropbox.com/s/25dpqlgb7v2hqnw/VGG16_faster_rcnn_biases.npz?dl=0"
+
+
 # If you wish to use a CPU for extraction of caffe weights to avoid GPU memory overuse or
 # hassle of caffe GPU configuration, set this to True
 CAFFE_USE_CPU = True
