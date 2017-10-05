@@ -106,7 +106,7 @@ def process_image(imPath):
     resized_image = cv2.resize(img, None, None,fx=ratio, fy=ratio, interpolation=cv2.INTER_LINEAR)
     return resized_image, np.array([img.shape[0], img.shape[1], ratio])
 
-def demo(img):
+def demo(img, threshold=0.5, gpu_fraction=1.0):
     """ Performs a forward pass through the Faster RCNN network.
 
     Inputs:
@@ -116,13 +116,15 @@ def demo(img):
     bounding_boxes  -- List of detections in the image
     scores          -- List of scores for each detection, one score for each category
                         in the pascal VOC dataset
+    threshold       -- Threshold for object detection, can be between 0 and 1 inclusive.
+                        The greater the value, the more picky the model will be with detections.
     """
 
     net_img_input = tf.placeholder("float", name="image_input")
     net_img_attr_input = tf.placeholder("float" , name="image_attr")
     
     print("Checking for weights/biases, downloading them if they do not exist...")
-    utils.downloadFasterRcnn()
+    utils.grabFasterRCNNParams()
 
     
     # The three variables to the left are tensor objects that will contain the values we
@@ -131,7 +133,10 @@ def demo(img):
     out_regions, out_scores = faster_rcnn(net_img_input, net_img_attr_input)
 
     output = []
-    with tf.Session() as sess:
+    config = tf.ConfigProto(log_device_placement=True)
+    config.gpu_options.per_process_gpu_memory_fraction = gpu_fraction
+    print("Using GPU memory fraction {}".format(gpu_fraction))
+    with tf.Session(config=config) as sess:
         image, image_attr = process_image(img)
         image = np.expand_dims(image, 0)
         sess.run(tf.global_variables_initializer())
@@ -147,7 +152,7 @@ def demo(img):
                 'cow', 'diningtable', 'dog', 'horse',
                 'motorbike', 'person', 'pottedplant',
                 'sheep', 'sofa', 'train', 'tvmonitor')
-    draw_boxes(img, output[0], output[1], classes[1:])
+    draw_boxes(img, output[0], output[1], classes[1:], thresh=threshold)
     
 def draw_boxes(img, regions, scores, names, thresh=0.5):
     """ 
