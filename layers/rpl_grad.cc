@@ -19,11 +19,11 @@ REGISTER_OP("RoiPoolerGrad")
 #include "tensorflow/core/framework/op_kernel.h"
 #include "tensorflow/core/framework/register_types.h"
 
-class RoiPooler : public OpKernel {
+class RoiPoolerGrad : public OpKernel {
 private:
     int feat_stride, pooled_w, pooled_h;
 public:
-    explicit RoiPooler(OpKernelConstruction *context) : OpKernel(context) {
+    explicit RoiPoolerGrad(OpKernelConstruction *context) : OpKernel(context) {
 		// Save Attributes
 		OP_REQUIRES_OK(context, context->GetAttr("pooled_height", &pooled_h));
 		OP_REQUIRES_OK(context, context->GetAttr("pooled_width", &pooled_w));
@@ -87,28 +87,28 @@ public:
 		auto argmax = _argmax.template tensor<float,5>(); 
 		
 		// We need to initialize the pooled output to a negative value 
-		// Not sure of more efficient way, doing it this way for now.
-		for(int a=0; a<num_rois; a++){
-		    for(int b=0; b<pooled_h; b++){
-				for(int c=0; c<pooled_w; c++){
-				    for(int d=0; d<feat_c; d++){
-						pooled_features(a,b,c,d) = std::numeric_limits<float>::min();
+		pooled_features.setConstant(std::numeric_limits<float>::min());
+		
+		for (int a = 0; a < num_rois; a++) {
+			for (int b = 0; b < pooled_h; b++) {
+				for (int c = 0; c < pooled_w; c++) {
+					for (int d = 0; d < feat_c; d++) {
+						pooled_features(a,b,c,d)=std::numeric_limits<float>::min();
 					}
 				}
 			}
 		}
 
 		// Likewise, we need to initialize the gradients to zero
-		backprop.setZero();
-		/*
-		for(int a=0; a<feat_h; a++){
-			for(int b=0; b<feat_w; b++){
-				for(int c=0; c<feat_c; c++){
-					backprop(a,b,c) = 0.;
+		backprop.setConstant(0.);
+
+		for (int a = 0; a < feat_h; a++) {
+			for (int b = 0; b < feat_w; b++) {
+				for (int c = 0; c < feat_c; c++) {
+					backprop(a,b,c)=0.;
 				}
 			}
-		}*/
-		
+		}
 		
 		for( int n=0 ; n < num_rois ; n++ ) {
 		    // Region of interest translated to feature input
@@ -131,12 +131,6 @@ public:
 			for( int c=0; c < feat_c ; c++ ) {
 				for( int ph=0 ; ph < pooled_h ; ph++ ) {
 				    for( int pw=0 ; pw < pooled_w ; pw++ ) {
-						// Check if gradient here is zero.  If so, we can skip computation
-						// This check was breaking a unit test, disabled until further notice.
-						/*if (std::abs(gradient(n, ph, pw, c)) <= FLT_EPSILON) {
-							break;
-						}*/
-							
 						/* Transform ph,pw into h,w region in feature input to be pooled
 						 * Make sure to clip dimensions of regions to lie within
 						 * the image, e.g. within [0,0] and [feat_h, feat_w]
@@ -157,12 +151,17 @@ public:
 
 						// Calculate the argmax; This will let us know where the output
 						// came from, hence allowing us to backpropagate gradients correctly
+						int argmax_h = -1;
+						int argmax_w = -1;
+
 						for ( int h=h_0 ; h<h_f ; h++ ) {
 						    for ( int w=w_0 ; w<w_f ; w++ ) {
 								if ( features(h, w, c) > pooled_features(n, ph, pw, c) ){
 								    pooled_features(n, ph, pw, c) = features(h, w, c);
 								    argmax(n, ph, pw, c, 0) = h;
 								    argmax(n, ph, pw, c, 1) = w;
+									//argmax_h = h;
+									//argmax_w = w;
 								}
 							}
 						}
@@ -170,13 +169,15 @@ public:
 						// Backpropagate outputs to the correct regions
 						// We must check for invalid regions where the above for-loop does not
 						// execute at all, leaving pooled_features at an invalid, uninitialied value	
-						if ((h_f > h_0) && (w_f > w_0)){
+						//if (argmax_h != -1){
+						if((w_f>w_0) && (h_f>h_0)){	
 							// Assume single batches
 							int out_y = argmax(n, ph, pw, c, 0);
 							int out_x = argmax(n, ph, pw, c, 1);
 							// We do a sum here, but under normal circumstances only one
 							// of the channels of gradient will have nonzero values
 							backprop(out_y, out_x, c) += gradient(n, ph, pw, c);
+							//backprop(argmax_h, argmax_w, c) += gradient(n, ph, pw, c);
 						}
 					}
 				}
@@ -188,4 +189,4 @@ public:
 REGISTER_KERNEL_BUILDER(\
 		Name("RoiPoolerGrad")\
 		.Device(DEVICE_CPU)\
-		,RoiPooler);
+		,RoiPoolerGrad);

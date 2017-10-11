@@ -97,6 +97,41 @@ class singleRegionOutputTest(tf.test.TestCase):
         features = createDiagFeatures(width=16, height=16, channels=1, inverted=(True, True, False))
         expectation = [[[[237],[231]],[[189],[183]]]]
         self.single_roi_test_template(features, expectation)
-    
+
+def create_regions(xMin, xMax, yMin, yMax, nRegions):
+    xs = np.random.random_sample(nRegions)
+    xs = (xMax - xMin) * xs + xMin
+    ys = np.random.random_sample(nRegions)
+    ys = (yMax - yMin) * ys + yMin
+
+    hs = np.random.random_sample(nRegions)
+    hs = (yMax - yMin) * hs / 4
+    ws = np.random.random_sample(nRegions)
+    ws = (xMax - xMin) * ws / 4
+
+    regions = [ [x, y, min(x+w, xMax), min(y+h, yMax)] for x, y, h, w in zip(xs, ys, hs, ws) ]
+    return np.round(np.array(regions))
+
+
+class roiGradientTest(tf.test.TestCase):
+    def test_roi_gradient(self):
+        with self.test_session():    
+            nBatches = 4
+            nChannels = 8
+            features_shape = [38, 50, nChannels]
+            features = tf.random_normal(features_shape)
+            regions = create_regions(0, features_shape[0],
+                                     0, features_shape[1],
+                                     nBatches)
+            print(regions)
+            dummy_img_attr = tf.constant([1., 1., 1.])
+            stuff = [7,7]
+            pooled_out_shape = [nBatches, 7, 7, nChannels]
+            
+            y = roi_pooling_layer(features, dummy_img_attr, regions, 7,7 , 2)
+            error = tf.test.compute_gradient_error(features, features_shape, y, pooled_out_shape,
+                    delta=0.0001)
+            self.assertAlmostEqual(error, 0., delta=.001)
+
 if __name__ == '__main__':
    tf.test.main

@@ -66,18 +66,21 @@ public:
 		auto pooled_out = output_tensor->template tensor<float,4>();
 		auto region_props = proposal_regions->template tensor<float,2>();
 
-		// We need to initialize the pooled output to a negative value 
-		// Not sure of more efficient way, doing it this way for now.
-		for(int a=0; a<num_rois; a++){
-		    for(int b=0; b<pooled_h; b++){
-				for(int c=0; c<pooled_w; c++){
-				    for(int d=0; d<feat_c; d++){
-						pooled_out(a,b,c,d) = std::numeric_limits<float>::min();
+		// Initialize output to most negative numbers possible (even if not most negative possible,
+		// these will suffice)
+		pooled_out.setConstant(std::numeric_limits<float>::min());
+		
+		for (int a = 0; a < num_rois; a++) {
+			for (int b = 0; b < pooled_h; b++) {
+				for(int c = 0; c < pooled_w; c++) {
+					for(int d = 0; d < feat_c; d++) {
+						pooled_features(a,b,c,d)=std::numeric_limits<float>::min();
 					}
 				}
 			}
 		}
-		
+
+
 		for( int n=0 ; n < num_rois ; n++ ) {
 		    // Region of interest translated to feature input
 			const int roi_w_feat_start = static_cast<int>(

@@ -22,6 +22,4 @@ roi_pooling_layer_grad = roi_grad_module.roi_pooler_grad
 @ops.RegisterGradient("RoiPooler")
 def _roi_pool_grad_cc(op, grad):
     return [roi_pooling_layer_grad(op.inputs[0], op.inputs[1], op.inputs[2], grad,
-            op.get_attr("pooled_height"), op.get_attr("pooled_width"), op.get_attr("feature_stride")),
-            None,
-            None]
+            op.get_attr("pooled_height"), op.get_attr("pooled_width"), op.get_attr("feature_stride")), None, None]
