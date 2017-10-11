@@ -73,7 +73,7 @@ class Vgg19(object):
             return layer
 
         # All layer types have been defined, it is now time to actually make
-        # the modele
+        # the model
         self.layers = {}
         layerNames = [ 'conv1_1', 'relu1_1', 'conv1_2', 'relu1_2', 'pool1',
                        'conv2_1', 'relu2_1', 'conv2_2', 'relu2_2', 'pool2',

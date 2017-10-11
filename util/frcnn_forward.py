@@ -33,7 +33,6 @@ def faster_rcnn(image, image_attributes):
     feature_channels = 512 # Property of vgg16 network
     num_classes = 21
     confidence_threshold = 0.8
-
     vgg16_base = Vgg19('frcnn')
     vgg16_base.buildGraph(image, train=False,
             weightsPath=s.DEF_FRCNN_WEIGHTS_PATH,
@@ -53,39 +52,42 @@ def faster_rcnn(image, image_attributes):
     print("RoI pooling set up!")
     bbox_reg, cls_scores = cls.setUp(pooled_regions, pooled_h, pooled_w, feature_channels,
                                         namespace="frcnn")
-    
-    # cls_score is (300,21) ; bbox_reg is (300,84)
-    bbox_reg = tf.reshape(bbox_reg, (-1, 21, 4))
+    with easy_scope('frcnn'):
+        with easy_scope('reshape_cls_output'):
+            # cls_score is (300,21) ; bbox_reg is (300,84)
+            bbox_reg = tf.reshape(bbox_reg, (-1, 21, 4))
 
-    # Set proposed_regions shape to (300,1,4)
-    proposed_regions_reshape = tf.expand_dims(proposed_regions, axis=1)
+            # Set proposed_regions shape to (300,1,4)
+            proposed_regions_reshape = tf.expand_dims(proposed_regions, axis=1)
 
-    # Rescale the Regions of Interest to the proper scale
-    proposed_regions_reshape = proposed_regions_reshape / image_attributes[2]
+            # Rescale the Regions of Interest to the proper scale
+            proposed_regions_reshape = proposed_regions_reshape / image_attributes[2]
 
-    # Regress the Regions of Interest into class-specific detection boxes
-    reg_roi = rpn.regressAnchors(proposed_regions_reshape, bbox_reg, axis=-1)
+        with easy_scope('clip_regress_unpack_output'):
+            # Regress the Regions of Interest into class-specific detection boxes
+            reg_roi = rpn.regressAnchors(proposed_regions_reshape, bbox_reg, axis=-1)
 
-    # Clip all regions to image boundaries
-    reg_roi = rpn.clipRegions(reg_roi, image_attributes, axis=-1)
-    
-    # Unpack both the regions and scores by class
-    reg_rois = tf.unstack(reg_roi, num=21, axis=1)
-    bbox_scores = tf.unstack(cls_scores, num=21, axis=1) 
-        
-    # There are 20 classes, each in their own list.  Background is not stored
-    out_scores = [[] for _ in range(20)]
-    out_regions = [[] for _ in range(20)]
+            # Clip all regions to image boundaries
+            reg_roi = rpn.clipRegions(reg_roi, image_attributes, axis=-1)
+            
+            # Unpack both the regions and scores by class
+            reg_rois = tf.unstack(reg_roi, num=21, axis=1)
+            bbox_scores = tf.unstack(cls_scores, num=21, axis=1) 
+                
+        with easy_scope('non_max_suppression'):
+            # There are 20 classes, each in their own list.  Background is not stored
+            out_scores = [[] for _ in range(20)]
+            out_regions = [[] for _ in range(20)]
 
-    # We skip the first class since it is the background class.
-    for i, (regs, scores) in enumerate(zip(reg_rois[1:], bbox_scores[1:])):
-        # Perform NMS, but keep all of the indices (#indices < 300)
-        inds = nms(regs, scores, 300, iou_threshold=0.3)
-        regs = tf.gather(regs, inds)
-        scores = tf.gather(scores, inds)
-        out_scores[i] = scores 
-        out_regions[i] = regs
-    return out_regions, out_scores
+            # We skip the first class since it is the background class.
+            for i, (regs, scores) in enumerate(zip(reg_rois[1:], bbox_scores[1:])):
+                # Perform NMS, but keep all of the indices (#indices < 300)
+                inds = nms(regs, scores, 300, iou_threshold=0.3)
+                regs = tf.gather(regs, inds)
+                scores = tf.gather(scores, inds)
+                out_scores[i] = scores 
+                out_regions[i] = regs
+            return out_regions, out_scores
 
 def process_image(imPath):
     """ Loads and preprocesses an image located in path 'image'"""
@@ -120,7 +122,7 @@ def demo(img, threshold=0.5, gpu_fraction=1.0):
                         The greater the value, the more picky the model will be with detections.
     """
 
-    net_img_input = tf.placeholder("float", name="image_input")
+    net_img_input = tf.placeholder("float", name="image_input", shape=(1,600,800,3))
     net_img_attr_input = tf.placeholder("float" , name="image_attr")
     
     print("Checking for weights/biases, downloading them if they do not exist...")
@@ -134,14 +136,23 @@ def demo(img, threshold=0.5, gpu_fraction=1.0):
 
     output = []
     config = tf.ConfigProto(log_device_placement=True)
-    config.gpu_options.per_process_gpu_memory_fraction = gpu_fraction
+    #config.gpu_options.per_process_gpu_memory_fraction = gpu_fraction
     print("Using GPU memory fraction {}".format(gpu_fraction))
     with tf.Session(config=config) as sess:
+        writer = tf.summary.FileWriter(s.add_root('test/'), sess.graph)
         image, image_attr = process_image(img)
         image = np.expand_dims(image, 0)
         sess.run(tf.global_variables_initializer())
+
+        run_metadata = tf.RunMetadata()
+        run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE) 
         output = sess.run([out_regions, out_scores], 
-                feed_dict={net_img_input : image, net_img_attr_input : image_attr})
+                feed_dict={net_img_input : image, net_img_attr_input : image_attr},
+                run_metadata=run_metadata,
+                options=run_options,
+                )
+        #writer.add_summary(summary)
+        writer.add_run_metadata(run_metadata, "cats")
     print("Faster R-CNN successfully run")
     print("Generating visualizations...")
 

@@ -8,11 +8,7 @@ import tarfile
 from urllib.request import urlretrieve
 import threading
 import os
-<<<<<<< HEAD
 from functools import partial
-=======
-import functools.partial
->>>>>>> 9495c96c25536fed4d54fe489def86ae16526675
 from contextlib import contextmanager
 
 def genProgressBar(**kwargs):
@@ -40,11 +36,7 @@ def genProgressBar(**kwargs):
                 int(ratioComplete * 100)), end="\r")
         return
     
-<<<<<<< HEAD
     return partial(_progressBar, **kwargs)
-=======
-    return functools.partial(_progressBar, **kwargs)
->>>>>>> 9495c96c25536fed4d54fe489def86ae16526675
 
 class Singleton(type):
     """ Simple Singleton for use as metaclass """

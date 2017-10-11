@@ -23,8 +23,8 @@ def setUp(pooled_regions, pooled_h, pooled_w, feat_channels, namespace="rcnn"):
     """
 
     last_dimension = pooled_h * pooled_w * feat_channels
-    with easy_scope(namespace, reuse=True):
-        with easy_scope("fc6") as scope:
+    with easy_scope(namespace, reuse=True), tf.device("/gpu:0"):
+        with easy_scope("fc6", reuse=True):
             flattened_in = tf.reshape(pooled_regions, (-1, last_dimension))
             prevLayer = tf.nn.bias_add(tf.matmul(flattened_in, 
                         tf.get_variable("Weights")), tf.get_variable("Bias"))
@@ -44,13 +44,11 @@ def setUp(pooled_regions, pooled_h, pooled_w, feat_channels, namespace="rcnn"):
             scoreLayer = tf.nn.bias_add(tf.matmul(prevLayer,
                             weights), bias,name="out")
         
-        probLayer = tf.nn.softmax(scoreLayer, name="cls_prob")
-
         # Produce regressions (note these are with respect to the individual regions, so the
         # actual regions in the image resulting from these is yet to be calculated
         with easy_scope("bbox_pred", reuse=True) as scope:
             bboxPred = tf.nn.bias_add(tf.matmul(prevLayer,
                         tf.get_variable("Weights")), tf.get_variable("Bias"), name="out")
 
-
+        probLayer = tf.nn.softmax(scoreLayer, name="cls_prob")
     return bboxPred, probLayer

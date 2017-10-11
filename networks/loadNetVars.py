@@ -32,6 +32,7 @@ def extractLayers(scope, weightsPath, biasesPath, device="/cpu:0"):
     weightsDict = numpy.load(weightsPath)
     biasesDict = numpy.load(biasesPath)
 
+    print("scope is {}".format(scope))
     # Here, we do a for loop looping through all of the names, "name".
     with tf.device(device) as dev:
         with easy_scope(scope) as model_scope:

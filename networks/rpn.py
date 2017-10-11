@@ -47,40 +47,42 @@ def Rpn(features, image_attr, train=False, namespace="rpn"):
         # Assuming that feat_w = feat_h = 14, and that the number of anchors is 9,
         # we have the output should be of shape (9,14,14,2).
 
-        # However,a tf.nn.conv2d cannot create batches out of thin air.  Hence, the
+        # However, a tf.nn.conv2d cannot create batches out of thin air.  Hence, the
         # rpn_cls_score should create a (1, 14, 14, 9*2) instead, which we reshape to
         # (1, 14, 14, 2, 9), transpose to (9, 14, 14, 2, 1), then tf.squeeze the last
         # dimension out to arrive at the desired wonderful shape of (9, 14, 14,
         # 2).  The last dimension of rpn_cls_score is unpacked from (9*2) to (2,9) and
         # not (9,2) since this is how the weights imported from caffe are packed.
 
-        feature_h = tf.gather_nd(tf.shape(features), [1])
-        feature_w = tf.gather_nd(tf.shape(features), [2])
+        with easy_scope("create_rpn_score_batches"):
+            feature_h = tf.gather_nd(tf.shape(features), [1])
+            feature_w = tf.gather_nd(tf.shape(features), [2])
 
-        prevLayer = tf.reshape(prevLayer, (1, feature_h, feature_w, 2, 9))
-        prevLayer = tf.transpose(prevLayer, (4, 1, 2, 3, 0))
-        prevLayer = tf.squeeze(prevLayer)
+            prevLayer = tf.reshape(prevLayer, (1, feature_h, feature_w, 2, 9))
+            prevLayer = tf.transpose(prevLayer, (4, 1, 2, 3, 0))
+            prevLayer = tf.squeeze(prevLayer)
 
-        prevLayer = tf.reshape(prevLayer, (-1,2))
+            prevLayer = tf.reshape(prevLayer, (-1,2))
 
-        rpnScores  = tf.nn.softmax(prevLayer,dim=-1, name="rpn_cls_prob_raw")
-        rpnScores = tf.identity(rpnScores, name="wtf")
+            rpnScores  = tf.nn.softmax(prevLayer,dim=-1, name="rpn_cls_prob_raw")
 
-        rpnScores = tf.reshape(rpnScores, (9, feature_h, feature_w, 2))
+            rpnScores = tf.reshape(rpnScores, (9, feature_h, feature_w, 2))
 
-        _ , rpnScores = tf.unstack(rpnScores, num=2, axis=-1)
+            _ , rpnScores = tf.unstack(rpnScores, num=2, axis=-1)
 
         rpnScores = tf.identity(rpnScores, name="rpn_cls_prob")
+        
         # Region Proposal Network - Bounding Box Proposal Regression
         rpnBboxPred = createConvLayer(layer3x3, "rpn_bbox_pred")
         
-        # We want to resehape rpnBboxPred just like we did the scores.
-        # Only difference is that we reshape to (9,14,14,4) instead of
-        # (9,14,14,2) (in the case of feat_h=feat_w=14)
+        with easy_scope("create_rpn_bbox_batches"):
+            # We want to reshape rpnBboxPred just like we did the scores.
+            # Only difference is that we reshape to (9,14,14,4) instead of
+            # (9,14,14,2) (in the case of feat_h=feat_w=14)
 
-        prevLayer = tf.reshape(rpnBboxPred, (1, feature_h, feature_w, 9, 4))
-        prevLayer = tf.transpose(prevLayer, (3,1,2,4,0))
-        rpnBboxPred = tf.squeeze(prevLayer)
+            prevLayer = tf.reshape(rpnBboxPred, (1, feature_h, feature_w, 9, 4))
+            prevLayer = tf.transpose(prevLayer, (3,1,2,4,0))
+            rpnBboxPred = tf.squeeze(prevLayer)
 
         out = proposalLayer(s.DEF_FEATURE_STRIDE,
                             s.DEF_IOU_THRESHOLD,
@@ -93,12 +95,13 @@ def Rpn(features, image_attr, train=False, namespace="rpn"):
                             image_attr,
                             s.DEF_MIN_PROPOSAL_DIMS
                             )
-        return out
+    
+    return out
 
 
 def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
                   scores, bbox_regressions, feature_h, feature_w, img_attr,
-                  minimum_dim):
+                  minimum_dim, device="/cpu:0"):
     """ 
     Propose the actual regions given outputs of previous conv layers
 
@@ -142,36 +145,37 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
 
     """
 
-    baseAnchors = generateAnchors(ratios=[2, 1, .5])
+    with easy_scope(name="proposal_layer"), tf.device(device) as dev:
+        baseAnchors = generateAnchors(ratios=[2, 1, .5])
 
-    shiftedAnchors = generateShiftedAnchors(baseAnchors, feature_h, feature_w,
-            feature_stride)
+        shiftedAnchors = generateShiftedAnchors(baseAnchors, feature_h, feature_w,
+                feature_stride)
 
-    regressedAnchors = regressAnchors(shiftedAnchors, bbox_regressions)
+        regressedAnchors = regressAnchors(shiftedAnchors, bbox_regressions)
 
-    clippedAnchors = clipRegions(regressedAnchors, img_attr)
+        clippedAnchors = clipRegions(regressedAnchors, img_attr)
 
-    p_anchors, p_scores = prunedScoresAndAnchors(clippedAnchors, 
-            scores, minimum_dim, img_attr)
+        p_anchors, p_scores = prunedScoresAndAnchors(clippedAnchors, 
+                scores, minimum_dim, img_attr)
 
-    pre_nms_keep = 6000
-    top_scores, top_score_indices = tf.nn.top_k(p_scores, k=pre_nms_keep, name="top_scores")
+        pre_nms_keep = 6000
+        top_scores, top_score_indices = tf.nn.top_k(p_scores, k=pre_nms_keep, name="top_scores")
 
-    # Modifying the top_score_indices to be able to be properly used with gather_nd
-    top_score_indices = tf.cast(top_score_indices, tf.int32, name="top_score_indices")
-    top_score_indices = tf.expand_dims(top_score_indices, axis=1, name="top_score_indices_expanded")
-    top_anchors = tf.gather_nd(p_anchors, top_score_indices, name="top_anchors")
+        # Modifying the top_score_indices to be able to be properly used with gather_nd
+        top_score_indices = tf.cast(top_score_indices, tf.int32, name="top_score_indices")
+        top_score_indices = tf.expand_dims(top_score_indices, axis=1, name="top_score_indices_expanded")
+        top_anchors = tf.gather_nd(p_anchors, top_score_indices, name="top_anchors")
 
-    # We want nms to keep everything that passes the IoU test
-    post_nms_indices = nms(top_anchors, top_scores,
-                        post_nms_keep, iou_threshold=iou_threshold, name="post_nms_indices")
+        # We want nms to keep everything that passes the IoU test
+        post_nms_indices = nms(top_anchors, top_scores,
+                            post_nms_keep, iou_threshold=iou_threshold, name="post_nms_indices")
 
-    # Expanding nms_indices for use with tf.gather_nd
-    post_nms_indices = tf.expand_dims(post_nms_indices, axis=1, name="post_nms_indices_expanded")
-    final_anchors = tf.gather_nd(top_anchors, post_nms_indices, 
-            name='proposal_regions')
-    final_scores = tf.gather_nd(top_scores, post_nms_indices, 
-                                    name='proposal_region_scores')
+        # Expanding nms_indices for use with tf.gather_nd
+        post_nms_indices = tf.expand_dims(post_nms_indices, axis=1, name="post_nms_indices_expanded")
+        final_anchors = tf.gather_nd(top_anchors, post_nms_indices, 
+                name='proposal_regions')
+        final_scores = tf.gather_nd(top_scores, post_nms_indices, 
+                                        name='proposal_region_scores')
 
     return final_anchors, final_scores
 
