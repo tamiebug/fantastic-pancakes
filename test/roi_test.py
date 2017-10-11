@@ -58,41 +58,25 @@ class shapesTest(tf.test.TestCase):
         feat_map = tf.random_normal((4,5,6))
         op = roi_pooling_layer(feat_map, dummy_img_attr, regions, 7, 8, 16)
         result = eval_cpu(op,self)
-        self.assertEqual(result[0].shape, (2, 7, 8, 6),
-                "expected %s, got %s"%(str((2,7,8,4)), str(result[0].shape)))
+        self.assertEqual(result.shape, (2, 7, 8, 6),
+                "expected %s, got %s"%(str((2,7,8,4)), str(result.shape)))
 
     def test_shape_B(self):
         regions = tf.constant([[33.,109.,204., 19,]])
         feat_map = createDiagFeatures(width=16,height=16,channels=1)
         op = roi_pooling_layer(feat_map, dummy_img_attr, regions, 2, 2, 16)
         result = eval_cpu(op,self)
-        self.assertEqual(result[0].shape, (1,2,2,1), "Got %s"%str(result[0].shape))
+        self.assertEqual(result.shape, (1,2,2,1), "Got %s"%str(result.shape))
 
-class paramsTest(tf.test.TestCase):
-    def test_params_A(self):
-        regions = tf.constant([[0.,0.,2.,2.],[4.,6.,10.,10.]])
-        feat_map = tf.random_normal((4,5,6))
-        op = roi_pooling_layer(feat_map, dummy_img_attr, regions, 7, 8, 16)
-        result = eval_cpu(op,self)
-        self.assertEqual(result[2][0][0], 2., str(result[2][0][0]) )
-        self.assertEqual(result[2][0][1], 4., str(result[2][0][1]) )
-        self.assertEqual(result[2][0][2], 5., str(result[2][0][2]) )
-        self.assertEqual(result[2][1][0], 16., str(result[2][1][0]) )
-        self.assertEqual(result[2][1][1], 7., str(result[2][1][1]) )
-        self.assertEqual(result[2][1][2], 8., str(result[2][1][1]) )
-        self.assertEqual(result[2][2][0], 3., str(result[2][2][0]) )
-        self.assertEqual(result[2][2][1], 2., str(result[2][2][1]) )
 
 class singleRegionOutputTest(tf.test.TestCase):
     def single_roi_test_template(self, features, expectation):       
         regions = tf.constant([[33.,19.,204.,109.]])
         op =  roi_pooling_layer(features, dummy_img_attr, regions, 2, 2, 16)
         result = eval_cpu(op, self)
-        self.assertEqual(result[0].shape, (1, 2, 2, 1), "Shape incorrect.  Expected %s,\
-            but got %s"%(str((1,2,2,1)),str(result[0].shape)))
-        assertArrayAlmostEqual(self,result[0],expectation,
-                msg = "\nDumping entire argmax matrix: \n %s"%(str(result[1])) +
-                "\nDumping entire diagnostic matrix: \n %s"%(str(result[2])))
+        self.assertEqual(result.shape, (1, 2, 2, 1), "Shape incorrect.  Expected %s,\
+            but got %s"%(str((1,2,2,1)),str(result.shape)))
+        assertArrayAlmostEqual(self,result,expectation)
 
     def test_regular_input(self):
         features = createDiagFeatures(width=16, height=16, channels=1)
