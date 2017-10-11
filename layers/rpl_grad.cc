@@ -89,26 +89,8 @@ public:
 		// We need to initialize the pooled output to a negative value 
 		pooled_features.setConstant(std::numeric_limits<float>::min());
 		
-		for (int a = 0; a < num_rois; a++) {
-			for (int b = 0; b < pooled_h; b++) {
-				for (int c = 0; c < pooled_w; c++) {
-					for (int d = 0; d < feat_c; d++) {
-						pooled_features(a,b,c,d)=std::numeric_limits<float>::min();
-					}
-				}
-			}
-		}
-
 		// Likewise, we need to initialize the gradients to zero
 		backprop.setConstant(0.);
-
-		for (int a = 0; a < feat_h; a++) {
-			for (int b = 0; b < feat_w; b++) {
-				for (int c = 0; c < feat_c; c++) {
-					backprop(a,b,c)=0.;
-				}
-			}
-		}
 		
 		for( int n=0 ; n < num_rois ; n++ ) {
 		    // Region of interest translated to feature input
@@ -158,10 +140,8 @@ public:
 						    for ( int w=w_0 ; w<w_f ; w++ ) {
 								if ( features(h, w, c) > pooled_features(n, ph, pw, c) ){
 								    pooled_features(n, ph, pw, c) = features(h, w, c);
-								    argmax(n, ph, pw, c, 0) = h;
-								    argmax(n, ph, pw, c, 1) = w;
-									//argmax_h = h;
-									//argmax_w = w;
+									argmax_h = h;
+									argmax_w = w;
 								}
 							}
 						}
@@ -169,15 +149,8 @@ public:
 						// Backpropagate outputs to the correct regions
 						// We must check for invalid regions where the above for-loop does not
 						// execute at all, leaving pooled_features at an invalid, uninitialied value	
-						//if (argmax_h != -1){
-						if((w_f>w_0) && (h_f>h_0)){	
-							// Assume single batches
-							int out_y = argmax(n, ph, pw, c, 0);
-							int out_x = argmax(n, ph, pw, c, 1);
-							// We do a sum here, but under normal circumstances only one
-							// of the channels of gradient will have nonzero values
-							backprop(out_y, out_x, c) += gradient(n, ph, pw, c);
-							//backprop(argmax_h, argmax_w, c) += gradient(n, ph, pw, c);
+						if (argmax_h != -1){
+							backprop(argmax_h, argmax_w, c) += gradient(n, ph, pw, c);
 						}
 					}
 				}

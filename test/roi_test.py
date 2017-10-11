@@ -123,7 +123,6 @@ class roiGradientTest(tf.test.TestCase):
             regions = create_regions(0, features_shape[0],
                                      0, features_shape[1],
                                      nBatches)
-            print(regions)
             dummy_img_attr = tf.constant([1., 1., 1.])
             stuff = [7,7]
             pooled_out_shape = [nBatches, 7, 7, nChannels]

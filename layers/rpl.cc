@@ -70,17 +70,6 @@ public:
 		// these will suffice)
 		pooled_out.setConstant(std::numeric_limits<float>::min());
 		
-		for (int a = 0; a < num_rois; a++) {
-			for (int b = 0; b < pooled_h; b++) {
-				for(int c = 0; c < pooled_w; c++) {
-					for(int d = 0; d < feat_c; d++) {
-						pooled_features(a,b,c,d)=std::numeric_limits<float>::min();
-					}
-				}
-			}
-		}
-
-
 		for( int n=0 ; n < num_rois ; n++ ) {
 		    // Region of interest translated to feature input
 			const int roi_w_feat_start = static_cast<int>(
@@ -120,8 +109,6 @@ public:
 						int w_f = static_cast<int>(std::ceil( (pw+1) * pw_binsize ));
 						w_f = std::min(std::max(w_f + roi_w_feat_start, 0), feat_w);
 						
-						if (ph>1 || pw>1) {
-						}
 						// Incase we get a bad region
 						if ( (h_f <= h_0) || (w_f <= w_0) ){
 						    pooled_out(n, ph, pw, c) = 0.;
