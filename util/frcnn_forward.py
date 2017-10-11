@@ -47,8 +47,8 @@ def faster_rcnn(image, image_attributes):
     print("Region Proposal Network set up!")
 
     with easy_scope('frcnn'):
-        pooled_regions = roi_pooling_layer(tf.squeeze(features), image_attributes, proposed_regions, 
-                                        pooled_h, pooled_w, 16,name='roi_pooling_layer')[0]
+        pooled_regions = roi_pooling_layer(tf.squeeze(features), image_attributes, proposed_regions,
+                                        pooled_h, pooled_w, 16,name='roi_pooling_layer')
     print("RoI pooling set up!")
     bbox_reg, cls_scores = cls.setUp(pooled_regions, pooled_h, pooled_w, feature_channels,
                                         namespace="frcnn")
