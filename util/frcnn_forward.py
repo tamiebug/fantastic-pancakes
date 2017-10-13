@@ -1,6 +1,6 @@
 import tensorflow as tf
 import matplotlib.pyplot as plt
-from networks.vgg19 import Vgg19
+from networks.vgg import VGG
 from util import settings as s
 from util.utils import easy_scope
 from layers.custom_layers import roi_pooling_layer
@@ -33,26 +33,27 @@ def faster_rcnn(image, image_attributes):
     feature_channels = 512 # Property of vgg16 network
     num_classes = 21
     confidence_threshold = 0.8
-    vgg16_base = Vgg19('frcnn')
-    vgg16_base.buildGraph(image, train=False,
+    vgg16_base = VGG('f-rcnn')
+    features = vgg16_base.buildGraph(image, train=False,
             weightsPath=s.DEF_FRCNN_WEIGHTS_PATH,
             biasesPath=s.DEF_FRCNN_BIASES_PATH,
-            cutoff=['conv3_4', 'relu3_4', 'conv4_4', 'relu4_4', 'conv5_4', 'relu5_4',
-                    'pool5','fc6','relu6','fc7', 'relu7', 'fc8', 'prob']
+            network_version="VGG16CONV",
+            device="/gpu:0"
             )
-    print("Base vgg16 network initialized!")
-    features = vgg16_base.layers['relu5_3']
+
+    print("Layers of VGG are:")
+    print(vgg16_base.layers.keys())
     proposed_regions, rpn_scores = rpn.Rpn(features, image_attributes,
-                                    train=False, namespace='frcnn')
+                                    train=False, namespace='f-rcnn')
     print("Region Proposal Network set up!")
 
-    with easy_scope('frcnn'):
+    with easy_scope('f-rcnn'):
         pooled_regions = roi_pooling_layer(tf.squeeze(features), image_attributes, proposed_regions,
                                         pooled_h, pooled_w, 16,name='roi_pooling_layer')
     print("RoI pooling set up!")
     bbox_reg, cls_scores = cls.setUp(pooled_regions, pooled_h, pooled_w, feature_channels,
-                                        namespace="frcnn")
-    with easy_scope('frcnn'):
+                                        namespace="f-rcnn")
+    with easy_scope('f-rcnn'):
         with easy_scope('reshape_cls_output'):
             # cls_score is (300,21) ; bbox_reg is (300,84)
             bbox_reg = tf.reshape(bbox_reg, (-1, 21, 4))
@@ -127,7 +128,6 @@ def demo(img, threshold=0.5, gpu_fraction=1.0):
     
     print("Checking for weights/biases, downloading them if they do not exist...")
     utils.grabFasterRCNNParams()
-
     
     # The three variables to the left are tensor objects that will contain the values we
     # want to extract from the network
@@ -135,7 +135,7 @@ def demo(img, threshold=0.5, gpu_fraction=1.0):
     out_regions, out_scores = faster_rcnn(net_img_input, net_img_attr_input)
 
     output = []
-    config = tf.ConfigProto(log_device_placement=True)
+    config = tf.ConfigProto()#log_device_placement=True)
     #config.gpu_options.per_process_gpu_memory_fraction = gpu_fraction
     print("Using GPU memory fraction {}".format(gpu_fraction))
     with tf.Session(config=config) as sess:

@@ -23,8 +23,6 @@ def extractLayers(scope, weightsPath, biasesPath, device="/cpu:0"):
     device -- device on which to place the created variables
     """
 
-    # Loads parameters from .npz files, one for the weights and another for the biases
-    # Assumes that the proper variable names exist in the given scope somewhere
     weightsPath = _fixModelPath(weightsPath)
     biasesPath = _fixModelPath(biasesPath)
 
@@ -32,7 +30,6 @@ def extractLayers(scope, weightsPath, biasesPath, device="/cpu:0"):
     weightsDict = numpy.load(weightsPath)
     biasesDict = numpy.load(biasesPath)
 
-    print("scope is {}".format(scope))
     # Here, we do a for loop looping through all of the names, "name".
     with tf.device(device) as dev:
         with easy_scope(scope) as model_scope:

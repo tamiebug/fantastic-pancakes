@@ -4,7 +4,7 @@ import tensorflow as tf
 
 from util import frcnn_forward
 from util import utils
-from networks import vgg19
+from networks import VGG
 from util import settings as s
 from test import testUtils
 from test.testUtils import array_equality_assert
@@ -46,8 +46,8 @@ class ModelOutputGenerator(metaclass=utils.Singleton):
 
                     img = tf.placeholder(
                         "float", [1, 224, 224, 3], name="images")
-                    model = vgg19.Vgg19()
-                    model.buildGraph(img, train=False)
+                    model = vgg.VGG()
+                    model.buildGraph(img, network_version="VGG19")
 
                     images = images.reshape((1, 224, 224, 3))
 
@@ -169,8 +169,8 @@ class Vgg19SavingTest(unittest.TestCase):
         # Layers to be tested
         testLayers = ['conv1_1', 'conv2_1', 'conv3_4', 'conv4_4', 'fc6', 'fc7']
         img = tf.placeholder("float", [1, 224, 224, 3], name="images")
-        model = vgg19.Vgg19()
-        model.buildGraph(img, train=False)
+        model = vgg.VGG("vgg19")
+        model.buildGraph(img,network_version="VGG19")
 
         testLayerVariables = []
 
@@ -195,7 +195,7 @@ class Vgg19SavingTest(unittest.TestCase):
                         model.save(weightsFn, biasFn)
                         break
             # Load the weights/biases into a new model
-            model2 = vgg19.Vgg19()
+            model2 = vgg.VGG()
             model2.buildGraph(img, train=False, weightsPath="models/" +
                               weightsFn + ".npz", biasesPath="models/" + biasFn + ".npz")
             with tf.Session() as sess:
@@ -236,18 +236,11 @@ class Vgg16Test(unittest.TestCase):
             with tf.Session() as sess, tf.device("/gpu:0") as dev:
                 img = tf.placeholder(
                     "float", im_data.shape, name="images")
-                net = vgg19.Vgg19("vgg16test_1") 
-                    # These are the layers of VGG19 we don't use when making a VGG16 network
-                vgg16_cutoffs = ['conv3_4', 'relu3_4', 'conv4_4', 'relu4_4', 'conv5_4', 'relu5_4',
-                                'pool5','fc6','relu6','fc7', 'relu7', 'fc8', 'prob']
-                # Since we're only testing up to relu4_1, we can remove everything after it
-                relu4_1_cutoffs = ['conv4_2', 'relu4_2', 'conv4_3', 'relu4_3', 'pool4', 'conv5_1', 'relu5_1',
-                        'conv5_2', 'relu5_2', 'conv5_3', 'relu5_3']
-                cutoffs = vgg16_cutoffs + relu4_1_cutoffs
+                net = vgg.VGG("vgg16test_1")
                 net.buildGraph(img, train=False,
                     weightsPath=s.DEF_FRCNN_WEIGHTS_PATH,
                     biasesPath=s.DEF_FRCNN_BIASES_PATH,
-                    cutoff=cutoffs
+                    network_version="VGG16CONV"
                     )
 
                 sess.run(tf.global_variables_initializer())
@@ -255,7 +248,7 @@ class Vgg16Test(unittest.TestCase):
                 sess.close()
                 # Does output come in list form if only one output is produced? [probably]
                 # Blob name is conv4_1, not relu4_1; relu is done in-place by caffe
-                return array_equality_assert(self, np.expand_dims(output[0],0), self.reference_activations['conv4_1'])
+                return array_equality_assert(self, np.expand_dims(output,0), self.reference_activations['conv4_1'])
 
         return self.assertTrue( utils.isolatedFunctionRun( runGraph, False, self=self, im=im_data) )
 
@@ -277,28 +270,17 @@ class Vgg16Test(unittest.TestCase):
                 except KeyError:
                     print("Warning:  conv4_1 not found in reference_activations.  Something \
                             wrong with .npz file")
-                conv4_1 = tf.placeholder(
-                       "float", conv4_1_in.shape, name="conv4_1")
-
-
-                vgg16_cutoffs = ['conv3_4', 'relu3_4', 'conv4_4', 'relu4_4', 'conv5_4', 'relu5_4',
-                                'pool5','fc6','relu6','fc7', 'relu7', 'fc8', 'prob']
-                before_relu4_1_cutoffs = ['conv1_1', 'relu1_1', 'conv1_2', 'relu1_2', 'pool1',
-                        'conv2_1', 'relu2_1', 'conv2_2', 'relu2_2', 'pool2',
-                        'conv3_1', 'relu3_1', 'conv3_2', 'relu3_2', 'conv3_3' , 'relu3_3', 'pool3',
-                        'conv4_1', 'relu4_1']
-
-                cutoffs = vgg16_cutoffs + before_relu4_1_cutoffs
-                net = vgg19.Vgg19(namespace="vgg16test_2") 
-                net.buildGraph(conv4_1, train=False,
+                net = vgg.VGG(namespace="vgg16test_2")
+                net.buildGraph(tf.placeholder(), train=False,
                     weightsPath=s.DEF_FRCNN_WEIGHTS_PATH,
                     biasesPath=s.DEF_FRCNN_BIASES_PATH,
-                    cutoff=cutoffs
+                    network_version="VGG16CONV"
                     )
+                conv4_1 = net.layers['conv4_1']
                 sess.run(tf.global_variables_initializer())
                 output = sess.run(net.layers['relu5_3'], feed_dict={conv4_1 : conv4_1_in})
                 sess.close()
-                return array_equality_assert(self, np.expand_dims(output[0],0), self.reference_activations['conv5_3'])
+                return array_equality_assert(self, np.expand_dims(output,0), self.reference_activations['conv5_3'])
 
         return self.assertTrue(utils.isolatedFunctionRun(runGraph, False, self=self))
 
@@ -312,15 +294,12 @@ class Vgg16Test(unittest.TestCase):
             with tf.Session() as sess, tf.device("/gpu:0") as dev:
                 img = tf.placeholder(
                     "float", im_data.shape, name="images")
-                net = vgg19.Vgg19("vgg16test_3") 
+                net = vgg.VGG("vgg16test_3") 
                     # These are the layers of VGG19 we don't use when making a VGG16 network
-                vgg16_cutoffs = ['conv3_4', 'relu3_4', 'conv4_4', 'relu4_4', 'conv5_4', 'relu5_4',
-                                'pool5','fc6','relu6','fc7', 'relu7', 'fc8', 'prob']
-                cutoffs = vgg16_cutoffs
                 net.buildGraph(img, train=False,
                     weightsPath=s.DEF_FRCNN_WEIGHTS_PATH,
                     biasesPath=s.DEF_FRCNN_BIASES_PATH,
-                    cutoff=cutoffs
+                    network_version = "VGG16CONV"
                     )
 
                 sess.run(tf.global_variables_initializer())
@@ -328,7 +307,7 @@ class Vgg16Test(unittest.TestCase):
                 sess.close()
                 # Does output come in list form if only one output is produced? [probably]
                 # Blob name is conv4_1, not relu4_1; relu is done in-place by caffe
-                return array_equality_assert(self, np.expand_dims(output[0],0), self.reference_activations['conv5_3'])
+                return array_equality_assert(self, np.expand_dims(output,0), self.reference_activations['conv5_3'])
 
         return self.assertTrue( utils.isolatedFunctionRun( runGraph, False, self=self, im=im_data) )
 

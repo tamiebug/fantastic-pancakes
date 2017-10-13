@@ -127,6 +127,7 @@ def downloadFasterRcnn():
 
 def fasterCoffeeMachine(prototxtPath=s.DEF_FRCNN_PROTOTXT_PATH, caffemodelPath=s.DEF_FRCNN_CAFFEMODEL_PATH):
     """ Extract the weights and biases from a .caffemodel file and save in a npz file"""
+    import caffe
     
     # Extract Caffe weights and biases
     coffee = caffe.Net(prototxtPath, caffemodelPath, caffe.TEST)
@@ -174,6 +175,8 @@ def coffeeMachine(prototxtPath=s.DEF_PROTOTXT_PATH, caffemodelPath=s.DEF_CAFFEMO
     Extract the weights and biases from the .caffemodel and save it in npz files named
     DEF_WEIGHTS_PATH and DEF_BIASES_PATH
     """	
+    import caffe
+    
     # Extract Caffe weights and biases
     coffee = caffe.Net(prototxtPath, caffemodelPath, caffe.TEST)
     caffeVggWeights = { name: blobs[0].data for name, blobs in coffee.params.items() }
@@ -251,19 +254,6 @@ def isolatedFunctionRun(func, textSuppress, *args, **kwargs):
         os.close(nulls[1])	
 
     return output['return_val']
-
-def init_vgg16(namespace=None, train=False):
-    if namespace==None:
-        vgg16_base = Vgg19()
-    else:
-        vgg16_base = Vgg19(namespace)
-    vgg16_base.buildGraph(image, train=train,
-            weightsPath=s.DEF_FRCNN_WEIGHTS_PATH,
-            biasesPath=s.DEF_FRCNN_BIASES_PATH,
-            cutoff=['conv3_4', 'relu3_4', 'conv4_4', 'relu4_4', 'conv5_4', 'relu5_4',
-                    'pool5','fc6','relu6','fc7', 'relu7', 'fc8', 'prob']
-            )
-    return vgg16_base
 
 @contextmanager
 def easy_scope(name, *args, **kwargs):
