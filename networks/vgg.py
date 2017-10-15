@@ -91,6 +91,9 @@ class VGG():
                     or layerName is 'relu3_4' or layerName is 'relu4_4' or layerName is 'relu5_4':
                     continue
                 elif layerName is 'relu5_3':
+                    retList.append({ "name" : layerName,
+                        "trainable" : None,
+                        "device" : None})
                     break
                 else:
                     retList.append({ "name" : layerName,
@@ -99,6 +102,9 @@ class VGG():
         elif name is "VGG19CONV":
             for layerName in self.vgg19LayerNames:
                 if layerName is 'relu5_4':
+                    retList.append({ "name" : layerName,
+                        "trainable" : None,
+                        "device" : None})
                     break
                 else:
                     retList.append({ "name" : layerName,
