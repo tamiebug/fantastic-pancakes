@@ -3,7 +3,7 @@ import tensorflow as tf
 
 from util.utils import easy_scope
 
-def setUp(pooled_regions, pooled_h, pooled_w, feat_channels, namespace="rcnn"):
+def setUp(pooled_regions, pooled_h, pooled_w, feat_channels, trainable=False, namespace="rcnn"):
     """
     This function takes in the roi_pooling_layer output and spits out a bounding box regression and classification score.
 
@@ -11,9 +11,13 @@ def setUp(pooled_regions, pooled_h, pooled_w, feat_channels, namespace="rcnn"):
         This function assumes that the variables accessed by tf.get_variable() already exist.
         They must already have been initialized before calling this function.
         
-    Input:
-        pooled_regions: A tf.Tensor object with shape (num_regions, pooled_h, pooled_w, num_channels) containing the pooled
-                    regions of interestin the image.
+    Positional Inputs:
+        pooled_regions -- A tf.Tensor object with shape (num_regions, pooled_h, pooled_w, num_channels) containing the pooled
+                    regions of interest in the image.
+        pooled_h -- A scalar containing the height of the pooled input
+        pooled_w -- A scalar containing the width of the pooled input
+        feat_channels -- A scalar containing the number of channels of the pooled input
+        
     Outputs:
         A tuple containing both:
         A list of scores for a given set of classes.  In the case of the VOC 2007 dataset, there are 20 classes plus one background class.
@@ -27,28 +31,31 @@ def setUp(pooled_regions, pooled_h, pooled_w, feat_channels, namespace="rcnn"):
         with easy_scope("fc6", reuse=True):
             flattened_in = tf.reshape(pooled_regions, (-1, last_dimension))
             prevLayer = tf.nn.bias_add(tf.matmul(flattened_in, 
-                        tf.get_variable("Weights")), tf.get_variable("Bias"))
+                        tf.get_variable("Weights", trainable=trainable)), 
+                        tf.get_variable("Bias", trainable=trainable))
         
         prevLayer = tf.nn.relu(prevLayer, name="relu6")
 
         with easy_scope("fc7", reuse=True):
             prevLayer = tf.nn.bias_add(tf.matmul(prevLayer,
-                            tf.get_variable("Weights")), tf.get_variable("Bias"))
+                            tf.get_variable("Weights", trainable=trainable)), 
+                            tf.get_variable("Bias", trainable=trainable))
 
         prevLayer = tf.nn.relu(prevLayer, name="relu7")
 
         # Produce classification probabilities
         with easy_scope("cls_score", reuse=True):
-            weights = tf.get_variable("Weights")
-            bias = tf.get_variable("Bias")
+            weights = tf.get_variable("Weights", trainable=trainable)
+            bias = tf.get_variable("Bias", trainable=trainable)
             scoreLayer = tf.nn.bias_add(tf.matmul(prevLayer,
-                            weights), bias,name="out")
+                            weights), bias ,name="out")
         
         # Produce regressions (note these are with respect to the individual regions, so the
         # actual regions in the image resulting from these is yet to be calculated
         with easy_scope("bbox_pred", reuse=True) as scope:
             bboxPred = tf.nn.bias_add(tf.matmul(prevLayer,
-                        tf.get_variable("Weights")), tf.get_variable("Bias"), name="out")
+                        tf.get_variable("Weights", trainable=trainable)), 
+                        tf.get_variable("Bias", trainable=trainable), name="out")
 
         probLayer = tf.nn.softmax(scoreLayer, name="cls_prob")
     return bboxPred, probLayer

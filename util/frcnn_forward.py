@@ -43,8 +43,7 @@ def faster_rcnn(image, image_attributes):
 
     print("Layers of VGG are:")
     print(vgg16_base.layers.keys())
-    proposed_regions, rpn_scores = rpn.Rpn(features, image_attributes,
-                                    train=False, namespace='f-rcnn')
+    proposed_regions, rpn_scores = rpn.Rpn(features, image_attributes, namespace='f-rcnn')
     print("Region Proposal Network set up!")
 
     with easy_scope('f-rcnn'):
@@ -53,7 +52,7 @@ def faster_rcnn(image, image_attributes):
     print("RoI pooling set up!")
     bbox_reg, cls_scores = cls.setUp(pooled_regions, pooled_h, pooled_w, feature_channels,
                                         namespace="f-rcnn")
-    with easy_scope('f-rcnn'):
+    with easy_scope('f-rcnn'), tf.device("/cpu:0"):
         with easy_scope('reshape_cls_output'):
             # cls_score is (300,21) ; bbox_reg is (300,84)
             bbox_reg = tf.reshape(bbox_reg, (-1, 21, 4))
@@ -135,7 +134,7 @@ def demo(img, threshold=0.5, gpu_fraction=1.0):
     out_regions, out_scores = faster_rcnn(net_img_input, net_img_attr_input)
 
     output = []
-    config = tf.ConfigProto()#log_device_placement=True)
+    config = tf.ConfigProto(log_device_placement=True)
     #config.gpu_options.per_process_gpu_memory_fraction = gpu_fraction
     print("Using GPU memory fraction {}".format(gpu_fraction))
     with tf.Session(config=config) as sess:
@@ -152,7 +151,7 @@ def demo(img, threshold=0.5, gpu_fraction=1.0):
                 options=run_options,
                 )
         #writer.add_summary(summary)
-        writer.add_run_metadata(run_metadata, "cats")
+        writer.add_run_metadata(run_metadata, "purr")
     print("Faster R-CNN successfully run")
     print("Generating visualizations...")
 

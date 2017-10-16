@@ -46,5 +46,5 @@ CAFFE_USE_CPU = True
 DEF_FEATURE_STRIDE = 16
 DEF_IOU_THRESHOLD = .7
 DEF_PRE_NMS_KEEP = 12000
-DEF_POST_NMS_KEEP = 2000 #Is 2000 only in the case of training
+DEF_POST_NMS_KEEP = 400 #Is 2000 only in the case of training
 DEF_MIN_PROPOSAL_DIMS = 16 #In image pixels

@@ -5,7 +5,7 @@ from util import settings as s
 from . import loadNetVars
 from util.utils import easy_scope
 
-def Rpn(features, image_attr, train=False, namespace="rpn"):
+def Rpn(features, image_attr, train_net=None, namespace="rpn"):
     """ Region proposal network.  Proposes regions to later be pooled and classified/regressed
 
     Inputs:
@@ -14,27 +14,28 @@ def Rpn(features, image_attr, train=False, namespace="rpn"):
 
     image_attr  - A tf.Tensor object of rank 1, with values [img_h, img_w, scaling_factor], 
         where these values are described below:
-        img_w           - This network currently does not support variable image sizes.  img_w 
-        is the width of the input images to the base network
-        img_h           - Same as above, but the height instead of the width.
-        scaling_factor  - An input to the base vgg16 network is scaled such that it's as large 
-            as possible with shortest side less than 600 pixels and longest side less than 100 
-            pixels, both inclusive.  scaling_factor is the scaling factor used to effect this
-            transformation.
+    train_net   - Can be set to either None (default), "TRAIN_RPN", or "TRAIN_R-CNN".  When
+        set to one of the latter 'TRAIN_' settings, it initalizes the network differently, 
+        for training instead of for prediction.
+
         Output:
         A tf.tensor object of rank 2 with dimensions (num_rois, 4), where the second dimension
         is of the form {x0, y0, x1, y1}
     """
-
+    train=False
+    if train_net is not None:
+        train=True
+    
     def createConvLayer(bottom, name, stride=[1, 1, 1, 1]):
         # Creates a convolutional Tensorflow layer given the name
         # of the layer.  Expects a tf.Variable with name
         # model_scope/layer_scope/Weights and one with
         # model_scope/layer_scope/Bias to already exist.
         with easy_scope(name,reuse=True):
-            prevLayer = tf.nn.conv2d(bottom, tf.get_variable("Weights"), stride,
-                                     padding="SAME")
-            prevLayer = tf.nn.bias_add(prevLayer, tf.get_variable("Bias"), name="out")
+            prevLayer = tf.nn.conv2d(bottom, tf.get_variable("Weights", trainable=train), 
+                    stride, padding="SAME")
+            prevLayer = tf.nn.bias_add(prevLayer, tf.get_variable("Bias", trainable=train), 
+                    name="out")
         return prevLayer
 
     with easy_scope(namespace, reuse=True):
@@ -54,28 +55,22 @@ def Rpn(features, image_attr, train=False, namespace="rpn"):
         # 2).  The last dimension of rpn_cls_score is unpacked from (9*2) to (2,9) and
         # not (9,2) since this is how the weights imported from caffe are packed.
 
-        with easy_scope("create_rpn_score_batches"):
-            feature_h = tf.gather_nd(tf.shape(features), [1])
-            feature_w = tf.gather_nd(tf.shape(features), [2])
-
+        with easy_scope("create_rpn_score_batches"), tf.device("/cpu:0"):
+            feature_h = tf.shape(features)[1]
+            feature_w = tf.shape(features)[2]
             prevLayer = tf.reshape(prevLayer, (1, feature_h, feature_w, 2, 9))
             prevLayer = tf.transpose(prevLayer, (4, 1, 2, 3, 0))
             prevLayer = tf.squeeze(prevLayer)
 
-            prevLayer = tf.reshape(prevLayer, (-1,2))
-
-            rpnScores  = tf.nn.softmax(prevLayer,dim=-1, name="rpn_cls_prob_raw")
-
-            rpnScores = tf.reshape(rpnScores, (9, feature_h, feature_w, 2))
-
+            rpnScores = tf.nn.softmax(prevLayer, dim=-1, name="rpn_cls_prob_raw")
             _ , rpnScores = tf.unstack(rpnScores, num=2, axis=-1)
-
-        rpnScores = tf.identity(rpnScores, name="rpn_cls_prob")
+            rpnScores = tf.identity(rpnScores, name="rpn_cls_prob")
         
-        # Region Proposal Network - Bounding Box Proposal Regression
-        rpnBboxPred = createConvLayer(layer3x3, "rpn_bbox_pred")
+        with tf.device("/gpu:0"):
+            # Region Proposal Network - Bounding Box Proposal Regression
+            rpnBboxPred = createConvLayer(layer3x3, "rpn_bbox_pred")
         
-        with easy_scope("create_rpn_bbox_batches"):
+        with easy_scope("create_rpn_bbox_batches"), tf.device("/cpu:0"):
             # We want to reshape rpnBboxPred just like we did the scores.
             # Only difference is that we reshape to (9,14,14,4) instead of
             # (9,14,14,2) (in the case of feat_h=feat_w=14)
@@ -218,20 +213,22 @@ def clipRegions(anchors, img_attr, axis=-1):
 
     # Input anchors will be of shape
     # (numBaseAnchors, feature_h, feature_w, 4)
-    x1, y1, x2, y2 = tf.unstack(anchors,num=4,axis=axis)
-
-    zero = tf.constant([0.])
     
-    max_x = [tf.subtract(img_attr[1] * img_attr[2], tf.constant([1.]), name="clip_img_w")]
-    max_y = [tf.subtract(img_attr[0] * img_attr[2], tf.constant([1.]), name="clip_img_h")]
+    with tf.device("/cpu:0"): 
+        x1, y1, x2, y2 = tf.unstack(anchors,num=4,axis=axis)
 
-    x1_clipped = tf.minimum(tf.maximum(zero, x1), max_x)
-    x2_clipped = tf.minimum(tf.maximum(zero, x2), max_x)
-    y1_clipped = tf.minimum(tf.maximum(zero, y1), max_y)
-    y2_clipped = tf.minimum(tf.maximum(zero, y2), max_y)
+        zero = tf.constant([0.])
+        
+        max_x = [tf.subtract(img_attr[1] * img_attr[2], tf.constant([1.]), name="clip_img_w")]
+        max_y = [tf.subtract(img_attr[0] * img_attr[2], tf.constant([1.]), name="clip_img_h")]
 
-    # Pack 'em back up
-    retVal = tf.stack([x1_clipped, y1_clipped, x2_clipped, y2_clipped], axis, name="clipped_anchors")
+        x1_clipped = tf.minimum(tf.maximum(zero, x1), max_x)
+        x2_clipped = tf.minimum(tf.maximum(zero, x2), max_x)
+        y1_clipped = tf.minimum(tf.maximum(zero, y1), max_y)
+        y2_clipped = tf.minimum(tf.maximum(zero, y2), max_y)
+
+        # Pack 'em back up
+        retVal = tf.stack([x1_clipped, y1_clipped, x2_clipped, y2_clipped], axis, name="clipped_anchors")
 
     return retVal
 
@@ -287,36 +284,37 @@ def regressAnchors(anchors, bbox_regression, axis=-1):
 
     # (Actually, we're going to assume that the regressions are ALSO in the form
     # (numBaseAnchors, feat_h, feat_w, 4) !  This can be enforced at another stage.
+        
+    with tf.device("/cpu:0"):
+        x1, y1, x2, y2 = tf.unstack(anchors,num=4, axis=axis)
+        dx, dy, dw, dh = tf.unstack(bbox_regression,num=4, axis=axis)
 
-    x1, y1, x2, y2 = tf.unstack(anchors,num=4, axis=axis)
-    dx, dy, dw, dh = tf.unstack(bbox_regression,num=4, axis=axis)
+        # We must get the anchors into the same width/height x/y format as the
+        # bbox_regressions
+        w = x2 - x1 + [1.]
+        h = y2 - y1 + [1.]
+        x = w / [2.] + x1
+        y = h / [2.] + y1
 
-    # We must get the anchors into the same width/height x/y format as the
-    # bbox_regressions
-    w = x2 - x1 + [1.]
-    h = y2 - y1 + [1.]
-    x = w / [2.] + x1
-    y = h / [2.] + y1
+        # The dx and dy given by the regression must be scaled by w and h and added
+        # to the anchors
+        x_new = dx*w + x
+        y_new = dy*h + y
 
-    # The dx and dy given by the regression must be scaled by w and h and added
-    # to the anchors
-    x_new = dx*w + x
-    y_new = dy*h + y
+        # Since logarithms of the values in question are easier to learn (no regression means
+        # a logarithm of the change being zero), we learn the logarithms of h, w.
+        w_new = tf.exp(dw) * w
+        h_new = tf.exp(dh) * h
 
-    # Since logarithms of the values in question are easier to learn (no regression means
-    # a logarithm of the change being zero), we learn the logarithms of h, w.
-    w_new = tf.exp(dw) * w
-    h_new = tf.exp(dh) * h
+        # Transform back to the original (x1,y1,x2,y2) coordinate system
+        x1_final = x_new - [.5] * w_new
+        y1_final = y_new - [.5] * h_new
+        x2_final = x_new + [.5] * w_new
+        y2_final = y_new + [.5] * h_new
 
-    # Transform back to the original (x1,y1,x2,y2) coordinate system
-    x1_final = x_new - [.5] * w_new
-    y1_final = y_new - [.5] * h_new
-    x2_final = x_new + [.5] * w_new
-    y2_final = y_new + [.5] * h_new
-
-    # Stack our anchors back up
-    regressedAnchors = tf.stack([x1_final, y1_final, x2_final, y2_final], axis,
-            name="regressed_anchors")
+        # Stack our anchors back up
+        regressedAnchors = tf.stack([x1_final, y1_final, x2_final, y2_final], axis,
+                name="regressed_anchors")
 
     # The output shape is the same as the input shape;  Output shape is
     # regressedAnchors.shape = (numBaseAnchors, feature_h, feature_w, 4)
