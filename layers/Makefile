@@ -1,7 +1,7 @@
 CC = g++-4.8
 CFLAGS = -std=c++11 -shared -fPIC -O2
 
-TARGETS = rpl nms rpl_grad
+TARGETS = rpl nms rpl_grad iou_labeler
 
 # Uncomment line before if compiling on OSX platform
 #CFLAGS += -undefined dynamic_lookup

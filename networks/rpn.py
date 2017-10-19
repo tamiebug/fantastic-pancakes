@@ -1,6 +1,9 @@
 import numpy as np
 import tensorflow as tf
+
 from layers.custom_layers import nms
+from layers.custom_layers import iou_labeler
+
 from util import settings as s
 from . import loadNetVars
 from util.utils import easy_scope
@@ -62,8 +65,10 @@ def Rpn(features, image_attr, train_net=None, namespace="rpn"):
             prevLayer = tf.transpose(prevLayer, (4, 1, 2, 3, 0))
             prevLayer = tf.squeeze(prevLayer)
 
-            rpnScores = tf.nn.softmax(prevLayer, dim=-1, name="rpn_cls_prob_raw")
-            _ , rpnScores = tf.unstack(rpnScores, num=2, axis=-1)
+            if train_net is not "TRAIN_RPN":
+                rpnScores = tf.nn.softmax(prevLayer, dim=-1, name="rpn_cls_prob_raw")
+                _ , rpnScores = tf.unstack(rpnScores, num=2, axis=-1)
+            
             rpnScores = tf.identity(rpnScores, name="rpn_cls_prob")
         
         with tf.device("/gpu:0"):
@@ -78,8 +83,9 @@ def Rpn(features, image_attr, train_net=None, namespace="rpn"):
             prevLayer = tf.reshape(rpnBboxPred, (1, feature_h, feature_w, 9, 4))
             prevLayer = tf.transpose(prevLayer, (3,1,2,4,0))
             rpnBboxPred = tf.squeeze(prevLayer)
-
-        out = proposalLayer(s.DEF_FEATURE_STRIDE,
+        
+        if train_net is not "TRAIN_RPN:"
+            out = proposalLayer(s.DEF_FEATURE_STRIDE,
                             s.DEF_IOU_THRESHOLD,
                             s.DEF_PRE_NMS_KEEP,
                             s.DEF_POST_NMS_KEEP,
@@ -90,8 +96,10 @@ def Rpn(features, image_attr, train_net=None, namespace="rpn"):
                             image_attr,
                             s.DEF_MIN_PROPOSAL_DIMS
                             )
-    
-    return out
+            return out
+
+        else:
+            return rpnScores, rpnBboxPred, feature_h, feature_w, image_attr
 
 
 def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
@@ -207,6 +215,39 @@ def prunedScoresAndAnchors(anchors, scores, minimum_dim, im_attr):
     scores_gathered = tf.gather_nd(scores, indices, name="pruned_scores")
     return anchors_gathered, scores_gathered
 
+def prunedScoresAndAnchors_andIndices(anchors, scores, minimum_dim, im_attr):
+    """ Return list of anchors and scores larger than a given minimum size
+
+        It is assumed that the shape of scores is (numAnchors, feat_h, feat_w, 2)
+        We output tensors of shape (?,2) for scores_gathered and (?,4) for
+        anchors_gathered.  This version of the function also outputs the indices
+        of the anchors sthat survive pruning
+    """
+    anchors = tf.transpose(anchors, (1,2,0,3))
+    scores = tf.transpose(scores, (1,2,0))
+    anchors = tf.reshape(anchors, (-1,4))
+    scores = tf.reshape(scores, (-1,))
+
+    x1, y1, x2, y2 = tf.unstack(anchors, num=4, axis=-1)
+
+    w = x2 - x1 + 1.
+    h = y2 - y1 + 1.
+
+    # Gotta scale the minimum_dim by the scale factor before use
+    minimum_dim = tf.constant([s.DEF_MIN_PROPOSAL_DIMS], dtype=tf.float32)
+    minimum_dim = minimum_dim * im_attr[2]
+
+    width_suffices = tf.greater_equal(w, minimum_dim, name="geqw")
+    height_suffices = tf.greater_equal(h, minimum_dim,name="geqh")
+
+    both_suffice = tf.logical_and(width_suffices, height_suffices)
+    indices = tf.where(both_suffice)
+
+    # The actual grabbing of indexed values happens here 
+    anchors_gathered = tf.gather_nd(anchors, indices, name="pruned_anchors")
+    scores_gathered = tf.gather_nd(scores, indices, name="pruned_scores")
+    return anchors_gathered, scores_gathered, indices
+
 
 def clipRegions(anchors, img_attr, axis=-1):
     """ Clip anchors so that all lie entirely within image """
@@ -320,6 +361,38 @@ def regressAnchors(anchors, bbox_regression, axis=-1):
     # regressedAnchors.shape = (numBaseAnchors, feature_h, feature_w, 4)
     return regressedAnchors
 
+def calculateRegressions(anchors, boxes, axis=-1):
+    """ Given anchor boxes and ground truth boxes, find regressions
+
+    The output of this function are compatible with the output of the convulutional
+    layers and of the form (dx, dy, dw, dh).  If the output of this function is
+    fed into regressAnchors, we should recover the original ground truth boxes once more.
+    """
+
+    with tf.device("/cpu:0"):
+        ax1, ay1, ax2, ay2 = tf.unstack(anchors, num=4, axis=-1)
+        bx1, by1, bx2, by2 = tf.unstack(anchors, num=4, axis=-1)
+
+        # Calculate the center coordinates for both boxes
+        aw = ax2 - ax1 + [1.]
+        ah = ay2 - ay1 + [1.]
+        ax = aw / [2.] + ax1
+        ay = ah / [2.] + ay1
+
+        bw = bx2 - bx1 + [1.]
+        bh = by2 - by1 + [1.]
+        bx = bw / [2.] + bx1
+        by = bh / [2.] + by1
+
+        # We are regressing from the anchor to the box
+        dx = (bx - ax) / aw
+        dy = (by - ay) / ah
+        dw = tf.log(bw / aw)
+        dh = tf.log(bh / ah)
+
+        # Stack the regressions up
+        regressions = tf.stack([dx, dy, dw, dh], axis, name="calculated_regressions")
+    return regressions    
 
 def generateAnchors(ratios=[.5, 1, 2], scales=[8, 16, 32], base=[1, 1, 16, 16]):
     # Generates a list of anchors based on a list of aspect ratios, a base
@@ -393,3 +466,140 @@ def toWidthHeightInverse(wh):
     anchor[3] = wh[3] + .5 * (wh[1] - 1)
 
     return anchor
+
+def sampleBoxes(labeled_boxes, num_classes, mini_batch_size):
+    
+    positive_box_indices = np.where(labeled_boxes[:,4] < (num_classes - .5))
+    negative_box_indices = np.logical_not(positive_box_indices)
+    
+    num_pos = positive_box_indices.shape[0]
+    num_neg = negative_box_indices.shape[0]
+
+    # We want to have a ratio of positive to negative samples of up to 1:1,
+    # padding the positives with negatives if they are not enough.
+    pos_to_choose = min(num_pos, num_neg, mini_batch_size//2)
+    neg_to_choose = min(num_neg, mini_batch_size - pos_to_choose)
+    
+    # Now we need to randomly sample from both
+    pos_Idx = np.random.choice(num_pos, pos_to_choose, replace=False)
+    neg_Idx = np.random.choice(num_neg, neg_to_choose, replace=False)
+
+    return pos_Idx, neg_Idx
+    
+
+def calculateRpnLoss(rpnRawScores, rpnBboxPred, feature_h, feature_w, image_attr, gt_boxes):
+
+    # Here, we need to do all of the work of the proposalLayer, except that we keep
+    # the indicies so that we can select from the raw scores instead of the softmax'd
+    # scores.
+
+    iou_threshold = 0.5
+    pre_nms_keep = 6000
+    post_nms_keep = 2000
+    num_classes = 2
+    mini_batch_size = 128
+
+    with easy_scope(name="proposal_layer_test"), tf.device("/cpu:0"):
+        baseAnchors = generateAnchors(ratios=[2,1.5])
+        shiftedAnchors = generateShiftedAnchors(baseAnchors, feature_h, feature_w,
+                s.DEF_FEATURE_STRIDE)
+        regressedAnchors = regressAnchors(shiftedAnchors, rpnBboxPred)
+        clippedAnchors = clipRegions(regressedAnchors, img_attr)
+        
+        # Softmax for rpnScores
+        rpnScores = tf.nn.softmax(rpnRawScores, dim=-1, name="rpn_cls_prob_raw")
+        _, rpnScores = tf.unstack(rpnScores, num=2, axis=-1)
+
+        p_anchors, p_scores, p_indices = prunedScoresAndAnchors_train(
+                clippedAnchors, rpnScores)
+         
+        # Going need the unregressed anchors to calculate the ground truth regressions
+        p_raw_anchors = tf.gather_nd(tf.reshape(shiftedAnchors, (-1, 4)), indices)
+    
+        # Will need the original regression values too
+        p_raw_regressions = tf.gather_nd(tf.reshape(rpnBboxPred, (-1, 4)), indices)
+
+        # Also, the raw scores, since they are going to be fed into the loss function
+        # in lieu of the softmax'd scores for the sake of numerical stability
+        p_raw_scores = tf.gather_nd(tf.reshape(rpnRawScores), (-1, 4)), indices)
+
+        # We use actual scores, however, for top_k
+        top_scores, top_score_indices = tf.nn.top_k(p_scores, k=pre_nms_keep, name="top_scores")
+
+        # Modifying the top_score_indices to be able to be used with gather_nd
+        top_score_indices = tf.cast(top_score_indices, tf.int32, name="top_scores_indices")
+        top_score_indices = tf.expand_dims(top_score_indices, axis=1,
+                name="top_score_indices_expanded")
+
+        # Select the correct elements of all the p_ varaiables
+        top_anchors = tf.gather_nd(p_anchors, top_score_indices, name="top_anchors")
+        top_raw_scores = tf.gather_nd(p_raw_scores, top_score_indices, name="top_raw_scores")
+        top_raw_anchors = tf.gather_nd(p_raw_anchors, top_scores_indices, name="top_raw_anchors")
+        top_raw_regressions = tf.gather_nd(p_raw_regressions, 
+                top_scores_indices, name="top_raw_regressions")
+
+        # We want nms to keep everything that passes the IoU test
+        post_nms_indices = nms(top_anchors, top_scores, post_nms_keep,
+                iou_threshold=iou_threshold, name="post_nms_indices")
+        
+        # Expanding nms_indices for use with tf.gather_nd
+        post_nms_indices = tf.expand_dims(pos_nms_indices, axis=1,
+                name="post_nms_indices_expanded")
+
+        # Select the correct elements of all the top_ variables
+        final_anchors = tf.gather_nd(top_anchors, post_nms_indices,
+                name="proposal_regions")
+        final_scores = tf.gather_nd(top_scores, post_nms_indices,
+                name="proposal_region_scores")
+        final_raw_scores = tf.gather_nd(top_raw_scores, post_nms_indices,
+                name="proposal_region_raw_scores")
+        final_raw_anchors = tf.gather_nd(top_raw_anchors, post_nms_indices,
+                name="proposal_region_raw_anchors")
+        final_raw_regressions = tf.gather_nd(top_raw_regressions, post_nms_indices,
+                name="proposal_region_raw_regressions")
+        
+        labeled_boxes = iou_labeler(final_anchors, gt_boxes, iou_threshold)
+         
+        # Sample boxes and raw scores for loss
+        posIdx, negIdx = tf.py_func(lambda x: sampleBoxes(x, num_classes, mini_batch_size),
+                labeled_boxes, [tf.float32, tf.float32])
+
+        positive_boxes = tf.gather_nd(final_anchors, posIdx)
+        positive_raw_scores = tf.gather_nd(final_raw_scores, posIdx)
+        negative_boxes = tf.gather_nd(final_anchors, negIdx)
+        negative_raw_scores = tf.gather_nd(final_raw_scores, negIdx)
+    
+        # There is no regression loss for negative examples.  For the positives, we need
+        # to find the gt regression from anchor to gt boxes
+        positive_anchors = tf.gather_nd(final_raw_anchors, posIdx)
+        positive_gt_boxes = tf.gather(ground_truth, labeled_boxes[:,4])
+        positive_gt_regs = calculateRegressions(positive_anchors, positive_gt_boxes, axis=-1)
+        positive_raw_regressions = tf.gather_nd(final_raw_regressions, posIdx)
+        
+        # Flatten regressions before passing into the huber loss function
+        flat_pred_regs = tf.reshape(positive_raw_regressions, [-1])
+        flat_gt_regs = tf.reshape(positive_gt_regs, [-1])
+        
+        reg_loss = tf.losses.huber_loss(flat_pred_regs, flat_gt_regs, delta=1.0)
+
+        # Class-agnostic log loss for positive examples
+        # Need to create a whole bunch of [0,1]s of the right length
+        num_pos = tf.shape_n(positive_raw_scores)[0]
+        gt_onehot = tf.one_hot(tf.ones(num_pos, dtype=tf.int32), 2)
+        cls_loss_pos = tf.losses.softmax_cross_entropy(gt_onehot, positive_raw_scores)
+
+        # Log-loss for the negative examples
+        num_neg = tf.shape_n(negative_raw_scores)[0]
+        gt_onehot = tf.one_hot(tf.zeros(num_pos, dtype=tf.int32), 2)
+        cls_loss_neg = tf.losses.softmax_cross_entropy(gt_onehot, negative_raw_scores)
+
+        # Adding up the losses
+        reg_loss =/ num_pos
+        cls_loss = ( cls_loss_pos / num_pos ) + ( cls_loss_neg / num_neg )
+
+        return reg_loss + cls_loss
+
+
+
+
+

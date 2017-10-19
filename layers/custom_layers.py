@@ -23,3 +23,9 @@ roi_pooling_layer_grad = roi_grad_module.roi_pooler_grad
 def _roi_pool_grad_cc(op, grad):
     return [roi_pooling_layer_grad(op.inputs[0], op.inputs[1], op.inputs[2], grad,
             op.get_attr("pooled_height"), op.get_attr("pooled_width"), op.get_attr("feature_stride")), None, None]
+    
+# Making iou_labeler available for import 
+iou_labeler_location = os.path.join(dot_slash, "iou_labeler.so")
+iou_labeler_module = tf.load_op_library(iou_labeler_location)
+iou_labeler = iou_labeler_module.iou_labeler
+
