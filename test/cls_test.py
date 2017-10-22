@@ -14,6 +14,7 @@ from layers.custom_layers import roi_pooling_layer
 from networks import cls
 from networks import loadNetVars
 
+
 class ClsTest(unittest.TestCase):
     """
     Tests whether the classification part of the network has activations matching a reference.
@@ -53,8 +54,8 @@ class ClsTest(unittest.TestCase):
                     print("Warning: rois not found in reference activations.  Something \
                             wrong with .npz file")
 
-                feats = tf.placeholder("float", [None,None,None])
-                rois_placeholder = tf.placeholder("float", [None,4])
+                feats = tf.placeholder("float", [None, None, None])
+                rois_placeholder = tf.placeholder("float", [None, 4])
                 info = tf.placeholder("float", [3])
 
                 # 33.301205 is the diff you get if everything is zeroes.
@@ -67,12 +68,12 @@ class ClsTest(unittest.TestCase):
                                     16,# Feature Stride (16 for vgg)
                                     name='roi_pooling_layer') 
                 return sess.run(pool_layer, feed_dict={
-                    feats : np.squeeze(features),
-                    rois_placeholder : rois[:,[1,2,3,4]],
-                    info : im_info
+                    feats: np.squeeze(features),
+                    rois_placeholder: rois[:, [1, 2, 3, 4]],
+                    info: im_info
                     })[0]
 
-        result= utils.isolatedFunctionRun(runGraph, False, self, im_info)
+        result = utils.isolatedFunctionRun(runGraph, False, self, im_info)
         return array_equality_assert(self, result, self.reference_activations['pool5'])
 
     def test_fc7(self):
@@ -89,7 +90,7 @@ class ClsTest(unittest.TestCase):
                 loadNetVars.extractLayers("rcnn", s.DEF_FRCNN_WEIGHTS_PATH, s.DEF_FRCNN_BIASES_PATH)
                 net = cls.setUp(pool5, 7, 7, 512, namespace="rcnn")
                 sess.run(tf.global_variables_initializer())
-                return sess.run(["rcnn/relu7:0"], feed_dict={pool5 : pool5_in})
+                return sess.run(["rcnn/relu7:0"], feed_dict={pool5: pool5_in})
                 
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
         return array_equality_assert(self, result, self.reference_activations['fc7'])
@@ -108,7 +109,7 @@ class ClsTest(unittest.TestCase):
                 loadNetVars.extractLayers("rcnn", s.DEF_FRCNN_WEIGHTS_PATH, s.DEF_FRCNN_BIASES_PATH)
                 net = cls.setUp(tf.placeholder("float", name="pool5"), 7, 7, 512, namespace="rcnn")
                 sess.run(tf.global_variables_initializer())
-                return sess.run(["rcnn/cls_score/out:0"], feed_dict={"rcnn/relu7:0" : relu7_in})
+                return sess.run(["rcnn/cls_score/out:0"], feed_dict={"rcnn/relu7:0": relu7_in})
                 
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
         return array_equality_assert(self, result, self.reference_activations['cls_score'])
@@ -126,7 +127,7 @@ class ClsTest(unittest.TestCase):
                 loadNetVars.extractLayers("rcnn", s.DEF_FRCNN_WEIGHTS_PATH, s.DEF_FRCNN_BIASES_PATH)
                 net = cls.setUp(tf.placeholder("float", name="pool5"), 7, 7, 512, namespace="rcnn")
                 sess.run(tf.global_variables_initializer())
-                return sess.run(["rcnn/bbox_pred/out:0"], feed_dict={"rcnn/relu7:0" : relu7_in})
+                return sess.run(["rcnn/bbox_pred/out:0"], feed_dict={"rcnn/relu7:0": relu7_in})
 
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
         return array_equality_assert(self, result, self.reference_activations['bbox_pred'])

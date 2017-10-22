@@ -3,12 +3,14 @@ import tensorflow as tf
 import util.settings as s
 from util.utils import easy_scope
 
+
 def _fixModelPath(path):
     # Ensures that sloppily constructed model paths still work
     if not path.endswith(".npz"):
         return path + ".npz"
     else:
         return path
+
 
 def extractLayers(scope, weightsPath, biasesPath, device="/cpu:0"):
     """
@@ -47,7 +49,7 @@ def extractLayers(scope, weightsPath, biasesPath, device="/cpu:0"):
                         # Values were loaded elsewhere
                         warning = True
             if warning:
-                print(("extractLayers()  Warning : Some variable names already exist."+
+                print(("extractLayers()  Warning : Some variable names already exist." +
                         "  If unintentional, please choose a different scope name."))
             
     return

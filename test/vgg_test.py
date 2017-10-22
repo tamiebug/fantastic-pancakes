@@ -170,7 +170,7 @@ class Vgg19SavingTest(unittest.TestCase):
         testLayers = ['conv1_1', 'conv2_1', 'conv3_4', 'conv4_4', 'fc6', 'fc7']
         img = tf.placeholder("float", [1, 224, 224, 3], name="images")
         model = vgg.VGG("vgg19")
-        model.buildGraph(img,network_version="VGG19")
+        model.buildGraph(img, network_version="VGG19")
 
         testLayerVariables = []
 
@@ -213,6 +213,7 @@ class Vgg19SavingTest(unittest.TestCase):
             if os.path.isfile("models/" + biasFn + ".npz"):
                 os.remove("models/" + biasFn + ".npz")
 
+
 class Vgg16Test(unittest.TestCase):
     """
     Loads the modified vgg16 base model, which is lacking the final fully-connected layers, ending
@@ -244,13 +245,13 @@ class Vgg16Test(unittest.TestCase):
                     )
 
                 sess.run(tf.global_variables_initializer())
-                output = sess.run(net.layers['relu4_1'], feed_dict={img:im_data})
+                output = sess.run(net.layers['relu4_1'], feed_dict={img: im_data})
                 sess.close()
                 # Does output come in list form if only one output is produced? [probably]
                 # Blob name is conv4_1, not relu4_1; relu is done in-place by caffe
-                return array_equality_assert(self, np.expand_dims(output,0), self.reference_activations['conv4_1'])
+                return array_equality_assert(self, np.expand_dims(output, 0), self.reference_activations['conv4_1'])
 
-        return self.assertTrue( utils.isolatedFunctionRun( runGraph, False, self=self, im=im_data) )
+        return self.assertTrue(utils.isolatedFunctionRun(runGraph, False, self=self, im=im_data))
 
     def test_relu5_3(self):
         """ 
@@ -278,9 +279,9 @@ class Vgg16Test(unittest.TestCase):
                     )
                 conv4_1 = net.layers['conv4_1']
                 sess.run(tf.global_variables_initializer())
-                output = sess.run(net.layers['relu5_3'], feed_dict={conv4_1 : conv4_1_in})
+                output = sess.run(net.layers['relu5_3'], feed_dict={conv4_1: conv4_1_in})
                 sess.close()
-                return array_equality_assert(self, np.expand_dims(output,0), self.reference_activations['conv5_3'])
+                return array_equality_assert(self, np.expand_dims(output, 0), self.reference_activations['conv5_3'])
 
         return self.assertTrue(utils.isolatedFunctionRun(runGraph, False, self=self))
 
@@ -299,17 +300,17 @@ class Vgg16Test(unittest.TestCase):
                 net.buildGraph(img, train=False,
                     weightsPath=s.DEF_FRCNN_WEIGHTS_PATH,
                     biasesPath=s.DEF_FRCNN_BIASES_PATH,
-                    network_version = "VGG16CONV"
+                    network_version="VGG16CONV"
                     )
 
                 sess.run(tf.global_variables_initializer())
-                output = sess.run(net.layers['relu5_3'], feed_dict={img:im_data})
+                output = sess.run(net.layers['relu5_3'], feed_dict={img: im_data})
                 sess.close()
                 # Does output come in list form if only one output is produced? [probably]
                 # Blob name is conv4_1, not relu4_1; relu is done in-place by caffe
-                return array_equality_assert(self, np.expand_dims(output,0), self.reference_activations['conv5_3'])
+                return array_equality_assert(self, np.expand_dims(output, 0), self.reference_activations['conv5_3'])
 
-        return self.assertTrue( utils.isolatedFunctionRun( runGraph, False, self=self, im=im_data) )
+        return self.assertTrue(utils.isolatedFunctionRun(runGraph, False, self=self, im=im_data))
 
 
 if __name__ == '__main__':

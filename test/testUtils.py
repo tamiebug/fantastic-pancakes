@@ -1,6 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
+
 def eval_cpu(operation, s=None):
     ''' Evaluate operation on default graph and with cpu
     
@@ -16,6 +17,7 @@ def eval_cpu(operation, s=None):
             with tf.device("/cpu:0"):
                 return sess.run(operation)
 
+
 def eval_gpu(operation, s=None):
     ''' Evaluate operation on default graph and with gpu
     
@@ -30,6 +32,8 @@ def eval_gpu(operation, s=None):
         with s.test_session() as sess:
             with tf.device("/gpu:0"):
                 return sess.run(operation)
+
+
 def array_equality_assert(self, nparray, ref_nparray, tolerance=.01):
     """
     Looks up activation in list of activations to see whether it is as expected.
@@ -44,7 +48,7 @@ def array_equality_assert(self, nparray, ref_nparray, tolerance=.01):
                         allowed before failing the test.
     """
     # Check for shape mismatches
-    self.assertTrue(nparray.shape==ref_nparray.shape,
+    self.assertTrue(nparray.shape == ref_nparray.shape,
             msg="Unequal shapes.  Ref. shape is {}, array shape is {}".format(ref_nparray.shape, nparray.shape))
     greatest_diff = np.amax(np.absolute(ref_nparray - nparray))
     self.assertLessEqual(greatest_diff, tolerance, 

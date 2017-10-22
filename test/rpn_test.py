@@ -14,28 +14,30 @@ from util import frcnn_forward
 from networks import rpn
 from networks import loadNetVars
 
+
 class generateAnchorsTest(unittest.TestCase):
 
 	def test_properNumberOfAnchors(self):
 		output = rpn.generateAnchors()
-		self.assertEqual(9,len(output))
+		self.assertEqual(9, len(output))
 
 	def test_generateAnchors(self):
-		output = rpn.generateAnchors(ratios=[2,1,.5])
+		output = rpn.generateAnchors(ratios=[2, 1, .5])
 		expected = [
-			[ -83.0,  -39.0,  100.0,   56.0],
+			[-83.0,  -39.0,  100.0,   56.0],
 			[-175.0,  -87.0,  192.0,  104.0],
 			[-359.0, -183.0,  376.0,  200.0],
-			[ -55.0,  -55.0,   72.0,   72.0],
+			[-55.0,  -55.0,   72.0,   72.0],
 			[-119.0, -119.0,  136.0,  136.0],
 			[-247.0, -247.0,  264.0,  264.0],
-			[ -35.0,  -79.0,   52.0,   96.0],
-			[ -79.0, -167.0,   96.0,  184.0],
+			[-35.0,  -79.0,   52.0,   96.0],
+			[-79.0, -167.0,   96.0,  184.0],
 			[-167.0, -343.0,  184.0,  360.0]]
 
-		for rowOut, rowExp in zip(output,expected):
-			for eleOut, eleExp in zip(rowOut,rowExp):
-				self.assertAlmostEqual(eleOut,eleExp, places=5)
+		for rowOut, rowExp in zip(output, expected):
+			for eleOut, eleExp in zip(rowOut, rowExp):
+				self.assertAlmostEqual(eleOut, eleExp, places=5)
+
 
 class RpnTest(unittest.TestCase):
     """
@@ -73,7 +75,7 @@ class RpnTest(unittest.TestCase):
                 #    print op.name
                 sess.run(tf.global_variables_initializer())
                 return sess.run(["rcnn/rpn_cls_score/out:0"], feed_dict={
-                    features : features_activations, info : self.im_info})
+                    features: features_activations, info: self.im_info})
 
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
         return array_equality_assert(self, result, self.reference_activations["rpn_cls_score"])
@@ -95,7 +97,7 @@ class RpnTest(unittest.TestCase):
                 net = rpn.Rpn(features, info, namespace="rcnn")
                 sess.run(tf.global_variables_initializer())
                 return sess.run(["rcnn/rpn_bbox_pred/out:0"], 
-                        feed_dict={features : features_activations, info : self.im_info})
+                        feed_dict={features: features_activations, info: self.im_info})
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
         return array_equality_assert(self, result, self.reference_activations["rpn_bbox_pred"])
 
@@ -120,14 +122,14 @@ class RpnTest(unittest.TestCase):
                 net = rpn.Rpn(features, info, namespace="rcnn")
                 sess.run(tf.global_variables_initializer())
                 return sess.run(["rcnn/proposal_regions:0"], feed_dict={
-                    features : self.reference_activations['conv5_3'], # isn't really used
-                    'rcnn/rpn_cls_score/out:0' : score_activations,
-                    'rcnn/rpn_bbox_pred/out:0' : bbox_activations,
-                    info            : self.im_info})
+                    features: self.reference_activations['conv5_3'], # isn't really used
+                    'rcnn/rpn_cls_score/out:0': score_activations,
+                    'rcnn/rpn_bbox_pred/out:0': bbox_activations,
+                    info: self.im_info})
 
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
-        return array_equality_assert(self, result, self.reference_activations['rois'][:,[1,2,3,4]])
+        return array_equality_assert(self, result, self.reference_activations['rois'][:, [1, 2, 3, 4]])
 
-if __name__=="__main__":
+if __name__ == "__main__":
     unittest.main()
 

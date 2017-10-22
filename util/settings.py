@@ -1,10 +1,12 @@
 import os
 
+# flake8: noqa
+
 # The parent directory of the settings directory is the home directory of the project.
 def add_root(path):
     ROOT_DIR = os.path.abspath(os.path.join(
                 os.path.dirname(__file__), os.pardir))
-    return os.path.join(ROOT_DIR,path)
+    return os.path.join(ROOT_DIR, path)
 
 VGG_MEAN = [103.939, 116.779, 123.68]
 
@@ -22,19 +24,19 @@ DEF_PROTOTXT_DL = "https://gist.githubusercontent.com/ksimonyan/3785162f95cd2d5f
 
 DEF_FRCNN_DL = "https://dl.dropboxusercontent.com/s/o6ii098bu51d139/faster_rcnn_models.tgz?dl=0"
 DEF_FRCNN_PATH = add_root("models/faster_rcnn_models.tgz")
-DEF_FRCNN_CAFFEMODEL_PATH = add_root( 
+DEF_FRCNN_CAFFEMODEL_PATH = add_root(
         "models/faster_rcnn_models/VGG16_faster_rcnn_final.caffemodel")
 DEF_FRCNN_PROTOTXT_PATH = add_root("models/faster_rcnn_models/VGG16_faster_rcnn_final.prototxt")
 
 DEF_FRCNN_WEIGHTS_PATH = add_root("models/faster_rcnn_models/VGG16_faster_rcnn_weights.npz")
 DEF_FRCNN_BIASES_PATH = add_root("models/faster_rcnn_models/VGG16_faster_rcnn_biases.npz")
 
-DEF_TEST_IMAGE_PATHS = [add_root( "test/images/Cat.jpg"),
-                        add_root( "test/images/EnglishSetter.jpg"),
-                        add_root( "test/images/KitFox.jpg")]
+DEF_TEST_IMAGE_PATHS = [add_root("test/images/Cat.jpg"),
+                        add_root("test/images/EnglishSetter.jpg"),
+                        add_root("test/images/KitFox.jpg")]
 
-DEF_FRCNN_WEIGHTS_NPZ_DL="https://www.dropbox.com/s/9nhuutq0prhdu7w/VGG16_faster_rcnn_weights.npz?dl=0"
-DEF_FRCNN_BIASES_NPZ_DL="https://www.dropbox.com/s/25dpqlgb7v2hqnw/VGG16_faster_rcnn_biases.npz?dl=0"
+DEF_FRCNN_WEIGHTS_NPZ_DL = "https://www.dropbox.com/s/9nhuutq0prhdu7w/VGG16_faster_rcnn_weights.npz?dl=0"
+DEF_FRCNN_BIASES_NPZ_DL = "https://www.dropbox.com/s/25dpqlgb7v2hqnw/VGG16_faster_rcnn_biases.npz?dl=0"
 
 
 # If you wish to use a CPU for extraction of caffe weights to avoid GPU memory overuse or
@@ -46,5 +48,5 @@ CAFFE_USE_CPU = True
 DEF_FEATURE_STRIDE = 16
 DEF_IOU_THRESHOLD = .7
 DEF_PRE_NMS_KEEP = 12000
-DEF_POST_NMS_KEEP = 400 #Is 2000 only in the case of training
-DEF_MIN_PROPOSAL_DIMS = 16 #In image pixels
+DEF_POST_NMS_KEEP = 400  # Is 2000 only in the case of training
+DEF_MIN_PROPOSAL_DIMS = 16  # In image pixels
