@@ -156,6 +156,16 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
     And, A tf.Tensor object of rank one with shape (num_rois) containing scores
 
     """
+    final_anchors, final_scores, _, _ = _proposalLayer(feature_stride, iou_threshold,
+            pre_nms_keep, post_nms_keep, scores, bbox_regressions, feature_h, feature_w,
+            image_attr, minimum_dim, device)
+    return final_anchors, final_scores
+
+
+def _proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
+        scores, bbox_regressions, feature_h, feature_w, image_attr,
+        minimum_dim, device):
+    """ Implementation of internal logic of propsalLayer"""
 
     with easy_scope(name="proposal_layer"), tf.device(device):
         baseAnchors = generateAnchors(ratios=[2, 1, .5])
@@ -167,13 +177,13 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
 
         clippedAnchors = clipRegions(regressedAnchors, image_attr)
 
-        p_anchors, p_scores, _ = prunedScoresAndAnchors(clippedAnchors,
+        p_anchors, p_scores, p_indices = prunedScoresAndAnchors(clippedAnchors,
                 scores, minimum_dim, image_attr)
 
-        pre_nms_keep = 6000
         top_scores, top_score_indices = tf.nn.top_k(p_scores, k=pre_nms_keep, name="top_scores")
 
         top_anchors = tf.gather(p_anchors, top_score_indices, name="top_anchors", axis=0)
+        top_indices = tf.gather(p_indices, top_score_indices, name="top_indices")
 
         # We want nms to keep everything that passes the IoU test
         post_nms_indices = nms(top_anchors, top_scores,
@@ -183,8 +193,12 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
                 name="proposal_regions")
         final_scores = tf.gather(top_scores, post_nms_indices, axis=0,
                 name="proposal_region_scores")
+        final_indices = tf.gather(top_indices, post_nms_indices,
+                name="proposal_region_indices")
+        final_base_anchors = tf.gather(tf.reshape(regressedAnchors, (-1,4)), final_indices,
+                axis=0, name="proposal_region_base_anchors")
 
-    return final_anchors, final_scores
+    return final_anchors, final_scores, final_indices, final_base_anchors
 
 
 def prunedScoresAndAnchors(anchors, scores, minimum_dim, im_attr):
