@@ -73,3 +73,10 @@ tens/
 
 # Auxiliary files
 /aux_files
+
+# Diagnostic test output
+test/events.out.tfevents.*
+
+# cscope/ctags files
+tags
+cscope.out
