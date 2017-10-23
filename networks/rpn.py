@@ -486,11 +486,11 @@ def sampleBoxes(labeled_boxes, num_classes, mini_batch_size):
         Two lists of indices, one positives and the other negatives, randomly sampled
         from labeled_boxes
     """
-    positive_box_indices = np.where(labeled_boxes[:, 4] < (num_classes - .5))
-    negative_box_indices = np.logical_not(positive_box_indices)
+    positive_box_indices = np.where(labeled_boxes[:, 4] < (num_classes - .5))[0]
+    negative_box_indices = np.where(labeled_boxes[:, 4] >= (num_classes - .5))[0]
 
-    num_pos = positive_box_indices.shape[0]
-    num_neg = negative_box_indices.shape[0]
+    num_pos = len(positive_box_indices)
+    num_neg = len(negative_box_indices)
 
     # We want to have a ratio of positive to negative samples of up to 1:1,
     # padding the positives with negatives if they are not enough.
@@ -498,8 +498,8 @@ def sampleBoxes(labeled_boxes, num_classes, mini_batch_size):
     neg_to_choose = min(num_neg, mini_batch_size - pos_to_choose)
 
     # Now we need to randomly sample from both
-    pos_Idx = np.random.choice(num_pos, pos_to_choose, replace=False)
-    neg_Idx = np.random.choice(num_neg, neg_to_choose, replace=False)
+    pos_Idx = np.random.choice(positive_box_indices, pos_to_choose, replace=False)
+    neg_Idx = np.random.choice(negative_box_indices, neg_to_choose, replace=False)
 
     return pos_Idx, neg_Idx
 
