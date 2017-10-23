@@ -1,6 +1,5 @@
 import numpy
 import tensorflow as tf
-import util.settings as s
 from util.utils import easy_scope
 
 
@@ -15,7 +14,7 @@ def _fixModelPath(path):
 def extractLayers(scope, weightsPath, biasesPath, device="/cpu:0"):
     """
     Function that extracts weights and biases into properly scoped variables.
-    
+
     Positional arguments:
     scope -- tf.VariableScope ( or string representing a scope ) to place variables in
     weightsPath -- path to .npz file containing the weights
@@ -33,23 +32,25 @@ def extractLayers(scope, weightsPath, biasesPath, device="/cpu:0"):
     biasesDict = numpy.load(biasesPath)
 
     # Here, we do a for loop looping through all of the names, "name".
-    with tf.device(device) as dev:
-        with easy_scope(scope) as model_scope:
+    with tf.device(device):
+        with easy_scope(scope):
             warning = False
-            for name, weights_tnsr in weightsDict.items():    
+            for name, weights_tnsr in weightsDict.items():
                 if name.startswith("/"):
                     name = name[1:]
                 if name.endswith("/"):
                     name = name[:-1]
-                with easy_scope(name) as layer_scope:
+                with easy_scope(name):
                     try:
-                        tf.get_variable("Weights", trainable=False, initializer=tf.constant(weights_tnsr))
-                        tf.get_variable("Bias", trainable=False, initializer=tf.constant(biasesDict[name]))
+                        tf.get_variable("Weights", trainable=False,
+                            initializer=tf.constant(weights_tnsr))
+                        tf.get_variable("Bias", trainable=False,
+                            initializer=tf.constant(biasesDict[name]))
                     except ValueError:
                         # Values were loaded elsewhere
                         warning = True
             if warning:
-                print(("extractLayers()  Warning : Some variable names already exist." +
-                        "  If unintentional, please choose a different scope name."))
-            
+                print("extractLayers()  Warning : Some variable names already exist."
+                    "  If unintentional, please choose a different scope name.")
+
     return
