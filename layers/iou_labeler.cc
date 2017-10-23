@@ -18,7 +18,7 @@ REGISTER_OP("IouLabeler")
 	.Input("bbox_in : float")
 	.Input("gt_in : float")
 	.Attr("iou_threshold : float")
-	.Output("labeled_bbox : float")
+	.Output("labeled_bbox : float");
 
 static inline void ParseAndCheckBoxSizes(OpKernelContext* context,
 		const Tensor& boxes, const Tensor& gt) {
@@ -65,7 +65,7 @@ class IouLabelerOp : public OpKernel {
 	public:
 		explicit IouLabelerOp(OpKernelConstruction* context)
 			: OpKernel(context) { 
-			OP_REQUIRES_OK(context, context->getAttr("iou_threshold", &_iou_threshold_));
+			OP_REQUIRES_OK(context, context->GetAttr("iou_threshold", &iou_threshold_));
 		}
 
 		void Compute(OpKernelContext* context) override {
@@ -75,7 +75,7 @@ class IouLabelerOp : public OpKernel {
 			const Tensor& _boxes = context->input(0);
 			const Tensor& _gt = context->input(1);
 
-			ParseAndCheckBoxSizes(context, boxes, gt);
+			ParseAndCheckBoxSizes(context, _boxes, _gt);
 			if (!context->status().ok()) return;
 
 			typename TTypes<float, 2>::ConstTensor boxes = _boxes.tensor<float, 2>();
@@ -87,16 +87,16 @@ class IouLabelerOp : public OpKernel {
 			TensorShape out_shape({num_boxes, 5});
 			OP_REQUIRES_OK(context, context->allocate_output(0, out_shape, &_out));
 			
-			typename TTypes<float, 3>::ConstTensor out = _boxes.tensor<float, 3>();
+			typename TTypes<float, 2>::Tensor out = _out->tensor<float, 2>();
 
 			for(int i=0; i < num_boxes; ++i) {
 				float max_IoU = 0.;
-				int argmax_IOU = num_gts;
+				int argmax_IoU = num_gts;
 				for(int j=0; j < num_gts; ++j) {
 					float IoU = ComputeIOU(boxes, gt, i, j);
 					if (IoU >= iou_threshold_ && IoU >= max_IoU) {
 						max_IoU = IoU;
-						argmax_IOU = j;
+						argmax_IoU = j;
 					}
 					out(i, 0) = boxes(i, 0);
 					out(i, 1) = boxes(i, 1);
