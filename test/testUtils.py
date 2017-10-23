@@ -34,6 +34,26 @@ def eval_gpu(operation, s=None):
                 return sess.run(operation)
 
 
+def assertArrayAlmostEqual(self, A, B, places=6, msg=""):
+    B = np.array(B)
+    self.assertEqual(A.shape, B.shape,
+            msg="There is a shape mismatch.  Expected shape %s but got shape %s"
+                % (str(A.shape), str(B.shape))
+    )
+    # Under assumption of equal shape, the following runs just fine
+    it = np.nditer(A, flags=['multi_index'])
+    while not it.finished:
+        ind = it.multi_index
+        self.assertAlmostEqual(
+            A[ind], B[ind], places=places,
+            msg="At location %s, there is a mismatch.  We expected %d but got %d.\n "
+                % (ind, B[ind], A[ind])
+                + "Dumping entire comparison array: \n %s"
+                % (str(A) + msg)
+        )
+        it.iternext()
+
+
 def array_equality_assert(self, nparray, ref_nparray, tolerance=.01):
     """
     Looks up activation in list of activations to see whether it is as expected.
@@ -54,4 +74,4 @@ def array_equality_assert(self, nparray, ref_nparray, tolerance=.01):
     greatest_diff = np.amax(np.absolute(ref_nparray - nparray))
     self.assertLessEqual(greatest_diff, tolerance,
         msg="Greatest difference was %f" % greatest_diff)
-    return greatest_diff <= tolerance
+    return greatest_diff <= toleranc

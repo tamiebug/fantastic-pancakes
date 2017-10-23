@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-from .testUtils import eval_cpu
+from .testUtils import eval_cpu, assertArrayAlmostEqual
 from layers.custom_layers import roi_pooling_layer
 
 # RoiPoolingLayer needs an image attributes input to extract a scale factor from
@@ -31,25 +31,6 @@ def createDiagFeatures(width=16, height=16, channels=1, dtype=np.float32,
     else:
         return out
 
-
-def assertArrayAlmostEqual(self, A, B, places=6, msg=""):
-    B = np.array(B)
-    self.assertEqual(A.shape, B.shape,
-            msg="There is a shape mismatch.  Expected shape %s but got shape %s"
-                % (str(A.shape), str(B.shape))
-    )
-    # Under assumption of equal shape, the following runs just fine
-    it = np.nditer(A, flags=['multi_index'])
-    while not it.finished:
-        ind = it.multi_index
-        self.assertAlmostEqual(
-            A[ind], B[ind], places=places,
-            msg="At location %s, there is a mismatch.  We expected %d but got %d.\n "
-                % (ind, B[ind], A[ind])
-                + "Dumping entire comparison array: \n %s"
-                % (str(A) + msg)
-        )
-        it.iternext()
 
 # Quick shape references
 # feature_in.shape = (height,width,channels)
