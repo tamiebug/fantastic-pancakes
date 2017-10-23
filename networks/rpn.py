@@ -517,10 +517,9 @@ def calculateRpnLoss(rpnRawScores, rpnBboxPred, feature_h, feature_w, image_attr
         The loss for this minibatch
     """
 
-    # TODO(andy): When not feeling so lazy, replace these with references to util/settings.py vars
-    iou_threshold = 0.5
-    pre_nms_keep = 6000
-    post_nms_keep = 2000
+    iou_threshold = s.DEF_IOU_THRESHOLD_TRAIN
+    pre_nms_keep = s.DEF_PRE_NMS_KEEP
+    post_nms_keep = s.DEF_POST_NMS_KEEP_TRAIN
     num_classes = 2
     mini_batch_size = 128
     minimum_dim = s.DEF_MIN_PROPOSAL_DIMS
