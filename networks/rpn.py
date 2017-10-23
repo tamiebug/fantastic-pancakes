@@ -173,23 +173,16 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
         pre_nms_keep = 6000
         top_scores, top_score_indices = tf.nn.top_k(p_scores, k=pre_nms_keep, name="top_scores")
 
-        # Modifying the top_score_indices to be able to be properly used with gather_nd
-        top_score_indices = tf.cast(top_score_indices, tf.int32, name="top_score_indices")
-        top_score_indices = tf.expand_dims(top_score_indices, axis=1,
-                name="top_score_indices_expanded")
-        top_anchors = tf.gather_nd(p_anchors, top_score_indices, name="top_anchors")
+        top_anchors = tf.gather(p_anchors, top_score_indices, name="top_anchors", axis=0)
 
         # We want nms to keep everything that passes the IoU test
         post_nms_indices = nms(top_anchors, top_scores,
                             post_nms_keep, iou_threshold=iou_threshold, name="post_nms_indices")
 
-        # Expanding nms_indices for use with tf.gather_nd
-        post_nms_indices = tf.expand_dims(post_nms_indices, axis=1,
-                name="post_nms_indices_expanded")
-        final_anchors = tf.gather_nd(top_anchors, post_nms_indices,
-                name='proposal_regions')
-        final_scores = tf.gather_nd(top_scores, post_nms_indices,
-                name='proposal_region_scores')
+        final_anchors = tf.gather(top_anchors, post_nms_indices, axis=0,
+                name="proposal_regions")
+        final_scores = tf.gather(top_scores, post_nms_indices, axis=0,
+                name="proposal_region_scores")
 
     return final_anchors, final_scores
 

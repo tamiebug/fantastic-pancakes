@@ -28,6 +28,10 @@ def _roi_pool_grad_cc(op, grad):
 
 
 # Making iou_labeler available for import
-iou_labeler_location = os.path.join(dot_slash, "iou_labeler.so")
-iou_labeler_module = tf.load_op_library(iou_labeler_location)
-iou_labeler = iou_labeler_module.iou_labeler
+# iou_labeler_location = os.path.join(dot_slash, "iou_labeler.so")
+# iou_labeler_module = tf.load_op_library(iou_labeler_location)
+# iou_labeler = iou_labeler_module.iou_labeler
+
+# Dummy implementation
+def iou_labeler(*args, **kwargs):
+    return tf.constant([0]), tf.constant([0])

@@ -125,7 +125,7 @@ class RpnTest(unittest.TestCase):
                         s.DEF_FRCNN_BIASES_PATH)
                 rpn.Rpn(features, info, namespace="rcnn")
                 sess.run(tf.global_variables_initializer())
-                return sess.run(["rcnn/proposal_regions:0"], feed_dict={
+                return sess.run(["rcnn/proposal_layer/proposal_regions:0"], feed_dict={
                     features: self.reference_activations['conv5_3'],  # isn't really used
                     'rcnn/rpn_cls_score/out:0': score_activations,
                     'rcnn/rpn_bbox_pred/out:0': bbox_activations,
