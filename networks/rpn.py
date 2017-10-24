@@ -372,8 +372,12 @@ def regressAnchors(anchors, bbox_regression, axis=-1):
         # Transform back to the original (x1,y1,x2,y2) coordinate system
         x1_final = x_new - [.5] * w_new
         y1_final = y_new - [.5] * h_new
-        x2_final = x_new + [.5] * w_new
-        y2_final = y_new + [.5] * h_new
+
+        # x2, y2 represent bottom-left corner of top-right pixels.  Hence we need to
+        # subtract one, or else calling regressAnchors with trivial regressions augments
+        # x2 and y2 by one every single time it is called.
+        x2_final = x_new + [.5] * w_new - [1.]
+        y2_final = y_new + [.5] * h_new - [1.]
 
         # Stack our anchors back up
         regressedAnchors = tf.stack([x1_final, y1_final, x2_final, y2_final], axis,
@@ -400,18 +404,18 @@ def calculateRegressions(anchors, boxes, axis=-1):
 
     with tf.device("/cpu:0"):
         ax1, ay1, ax2, ay2 = tf.unstack(anchors, num=4, axis=-1)
-        bx1, by1, bx2, by2 = tf.unstack(anchors, num=4, axis=-1)
+        bx1, by1, bx2, by2 = tf.unstack(boxes, num=4, axis=-1)
 
         # Calculate the center coordinates for both boxes
-        aw = ax2 - ax1 + [1.]
-        ah = ay2 - ay1 + [1.]
-        ax = aw / [2.] + ax1
-        ay = ah / [2.] + ay1
+        aw = ax2 - ax1  + [1.]
+        ah = ay2 - ay1  + [1.]
+        ax = (aw * [.5]) + ax1
+        ay = (ah * [.5]) + ay1
 
-        bw = bx2 - bx1 + [1.]
-        bh = by2 - by1 + [1.]
-        bx = bw / [2.] + bx1
-        by = bh / [2.] + by1
+        bw = bx2 - bx1  + [1.]
+        bh = by2 - by1  + [1.]
+        bx = (bw * [.5]) + bx1
+        by = (bh * [.5]) + by1
 
         # We are regressing from the anchor to the box
         dx = (bx - ax) / aw

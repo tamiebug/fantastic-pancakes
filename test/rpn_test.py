@@ -8,6 +8,7 @@ import tensorflow as tf
 from util import utils
 from util import settings as s
 from test.testUtils import array_equality_assert
+from test.testUtils import eval_cpu
 from util import frcnn_forward
 
 from networks import rpn
@@ -132,6 +133,35 @@ class RpnTest(unittest.TestCase):
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
         return array_equality_assert(self, result,
             self.reference_activations['rois'][:, [1, 2, 3, 4]])
+
+
+class calculateRegressionsTest(tf.test.TestCase):
+    """Tests the calculateRegressions function"""
+    def test_if_inverse(self):
+        """Tests if calculateRegressions in the inverse of regressAnchors"""
+        num_examples = 20
+
+        # Random boxes
+        x0 = np.random.random_integers(10, 100, num_examples)
+        y0 = np.random.random_integers(10, 100, num_examples)
+        w = np.random.random_integers(10, 100, num_examples)
+        h = np.random.random_integers(10, 100, num_examples)
+        x1 = x0 + w
+        y1 = y0 + h
+        boxes = np.stack((x0, y0, x1, y1), axis=-1)
+        boxes = tf.constant(boxes, dtype=tf.float32)
+
+        # Random regressions
+        rx = np.random.random_sample(num_examples)
+        ry = np.random.random_sample(num_examples)
+        rw = np.random.random_sample(num_examples)
+        rh = np.random.random_sample(num_examples)
+        regs_np = np.stack((rx, ry, rw, rh), axis=-1)
+        regs = tf.constant(regs_np, dtype=tf.float32)
+
+        should_equal_regs = rpn.calculateRegressions(boxes, rpn.regressAnchors(boxes, regs))
+        result = eval_cpu(should_equal_regs, self)
+        self.assertAllClose(result, regs_np)
 
 
 
