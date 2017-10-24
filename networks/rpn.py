@@ -485,8 +485,8 @@ def toWidthHeight(anchor):
     width = anchor[2] - anchor[0] + 1
     height = anchor[3] - anchor[1] + 1
 
-    x = .5 * (anchor[0] + anchor[2])
-    y = .5 * (anchor[1] + anchor[3])
+    x = .5 * (anchor[0] + anchor[2] + 1)
+    y = .5 * (anchor[1] + anchor[3] + 1)
 
     return [width, height, x, y]
 
@@ -495,13 +495,14 @@ def toWidthHeightInverse(wh):
     """ Transforms from [w, h, x, y] to [x0,y0,x1,y1] format"""
     anchor = [0., 0., 0., 0.]
 
-    # We need to subtract 1 from the widths and the heights because they are heights
-    # and widths of the areas taken up by the pixels, not of the number of
-    # pixels themselves.
-    anchor[0] = wh[2] - .5 * (wh[0] - 1)
-    anchor[1] = wh[3] - .5 * (wh[1] - 1)
-    anchor[2] = wh[2] + .5 * (wh[0] - 1)
-    anchor[3] = wh[3] + .5 * (wh[1] - 1)
+    # We need to subtract 1 from the x2,y2 values because the  heights
+    # and widths of the areas is of the area taken up by the pixels, they
+    # go across the top-right pixel
+
+    anchor[0] = wh[2] - .5 * wh[0]
+    anchor[1] = wh[3] - .5 * wh[1]
+    anchor[2] = wh[2] + .5 * wh[0] - 1
+    anchor[3] = wh[3] + .5 * wh[1] - 1
 
     return anchor
 
