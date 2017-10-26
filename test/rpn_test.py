@@ -14,6 +14,7 @@ from util import frcnn_forward
 from networks import rpn
 from networks import loadNetVars
 
+
 class generateAnchorsTest(unittest.TestCase):
 
     def test_properNumberOfAnchors(self):
@@ -137,6 +138,7 @@ class RpnTest(unittest.TestCase):
 
 class calculateRegressionsTest(tf.test.TestCase):
     """Tests the calculateRegressions function"""
+
     def test_if_inverse(self):
         """Tests if calculateRegressions in the inverse of regressAnchors"""
         num_examples = 20
@@ -164,37 +166,30 @@ class calculateRegressionsTest(tf.test.TestCase):
         self.assertAllClose(result, regs_np)
 
 
-
 class sampleBoxesTest(unittest.TestCase):
     """Tests the sampleBoxes function"""
 
     def __init__(self, *args, **kwargs):
         super(sampleBoxesTest, self).__init__(*args, **kwargs)
         self.labeled_boxes = np.array(
-            [[0, 1, 0, 1, 3],
-             [4, 8, 16, 32, 0],
-             [4, 6, 4, 9, 3],
-             [2, 9, 1, 13, 2],
+            [[0, 1, 0, 1, -1],
+             [4, 8, 16, 32, 1],
+             [4, 6, 4, 9, -1],
+             [1, 4, 3, 29, 0],
+             [2, 9, 1, 13, 1],
              [4, 1, 9, 27, 1],
-             [7, 3, 9, 4, 3],
-             [10, 3, 14, 9, 2],
-             [3, 9, 3, 9, 2]]
+             [2, 9, 3, 10, 0],
+             [7, 3, 9, 4, -1],
+             [10, 3, 14, 9, 1],
+             [3, 9, 3, 9, 1]]
         )
 
     def test_pos_neg_ratio(self):
         """Tests whether positive to negative examples are at most at a 1:1 ratio"""
-        for mini_batch_size in range(2,9,2):
+        for mini_batch_size in range(2, 9, 2):
             pos_Idx, neg_Idx = rpn.sampleBoxes(self.labeled_boxes, 3, mini_batch_size)
             self.assertTrue(len(pos_Idx) <= len(neg_Idx),
                 msg="num_pos={}, num_neg={}".format(len(pos_Idx), len(neg_Idx)))
-
-    def test_neg_indices(self):
-        """Tests whether negative indices are correctly identified"""
-        for mini_batch_size in range(2,9,2):
-            pos_Idx, neg_Idx = rpn.sampleBoxes(self.labeled_boxes, 3, mini_batch_size)
-            for idx in neg_Idx:
-                self.assertEqual(self.labeled_boxes[idx,4], 3,
-                        msg=self.labeled_boxes[neg_Idx,4])
 
     def test_no_of_indices(self):
         """Tests whether the correct number of indices are being output"""
@@ -210,9 +205,8 @@ class sampleBoxesTest(unittest.TestCase):
         for mini_batch_size in range(2, 9, 2):
             pos_Idx, neg_Idx = rpn.sampleBoxes(self.labeled_boxes, 3, mini_batch_size)
             all_Idx = np.concatenate((pos_Idx, neg_Idx))
-            self.assertTrue(len(all_Idx)==len(set(all_Idx)),
+            self.assertTrue(len(all_Idx) == len(set(all_Idx)),
                 msg="Duplicates found.  List of indices, positive first is {}".format(all_Idx))
-
 
 
 if __name__ == "__main__":

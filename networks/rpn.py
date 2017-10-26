@@ -521,8 +521,11 @@ def sampleBoxes(labeled_boxes, num_classes, mini_batch_size):
         Two lists of indices, one positives and the other negatives, randomly sampled
         from labeled_boxes
     """
-    positive_box_indices = np.where(labeled_boxes[:, 4] < (num_classes - .5))[0]
-    negative_box_indices = np.where(labeled_boxes[:, 4] >= (num_classes - .5))[0]
+
+    # Positives are .1, negatives -1., and neither 0.  To avoid floating point rounding
+    # issues, I'm using comparison with .5 and -.5 instead of equality to 1. and -1.
+    positive_box_indices = np.where(labeled_boxes[:, 4] > .5)[0]
+    negative_box_indices = np.where(labeled_boxes[:, 4] < -.5)[0]
 
     num_pos = len(positive_box_indices)
     num_neg = len(negative_box_indices)
