@@ -407,13 +407,13 @@ def calculateRegressions(anchors, boxes, axis=-1):
         bx1, by1, bx2, by2 = tf.unstack(boxes, num=4, axis=-1)
 
         # Calculate the center coordinates for both boxes
-        aw = ax2 - ax1  + [1.]
-        ah = ay2 - ay1  + [1.]
+        aw = ax2 - ax1 + [1.]
+        ah = ay2 - ay1 + [1.]
         ax = (aw * [.5]) + ax1
         ay = (ah * [.5]) + ay1
 
-        bw = bx2 - bx1  + [1.]
-        bh = by2 - by1  + [1.]
+        bw = bx2 - bx1 + [1.]
+        bh = by2 - by1 + [1.]
         bx = (bw * [.5]) + bx1
         by = (bh * [.5]) + by1
 
@@ -559,7 +559,8 @@ def calculateRpnLoss(rpnRawScores, rpnBboxPred, feature_h, feature_w, image_attr
         The loss for this minibatch
     """
 
-    iou_threshold = s.DEF_IOU_THRESHOLD_TRAIN
+    iou_threshold_pos = s.DEF_IOU_THRESHOLD_TRAIN_POS
+    iou_threshold_neg = s.DEF_IOU_THRESHOLD_TRAIN_NEG
     num_classes = 2
     mini_batch_size = 128
 
@@ -577,7 +578,7 @@ def calculateRpnLoss(rpnRawScores, rpnBboxPred, feature_h, feature_w, image_attr
         predRegressions = tf.gather(tf.reshape(rpnBboxPred, (-1, 4)),
             predIndices, axis=0, name="final_raw_regressions")
 
-        labeled_boxes = iou_labeler(predBoxes, gt_boxes, iou_threshold)
+        labeled_boxes = iou_labeler(predBoxes, gt_boxes, iou_threshold_neg, iou_threshold_pos)
 
         # Sample boxes and raw scores for loss
         posIdx, negIdx = tf.py_func(lambda x: sampleBoxes(x, num_classes, mini_batch_size),

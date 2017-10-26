@@ -12,12 +12,23 @@
 #include "tensorflow/core/lib/gtl/stl_util.h"
 #include "tensorflow/core/platform/logging.h"
 
+#include <vector>
+#include <utility>
+
+
+// #define DEBUG_LOOP
+
+#ifdef DEBUG_LOOP
+#include <iostream>
+#endif
+
 using namespace tensorflow;
 
 REGISTER_OP("IouLabeler")
 	.Input("bbox_in : float")
 	.Input("gt_in : float")
-	.Attr("iou_threshold : float")
+	.Attr("iou_threshold_neg : float")
+	.Attr("iou_threshold_pos : float")
 	.Output("labeled_bbox : float");
 
 static inline void ParseAndCheckBoxSizes(OpKernelContext* context,
@@ -65,12 +76,18 @@ class IouLabelerOp : public OpKernel {
 	public:
 		explicit IouLabelerOp(OpKernelConstruction* context)
 			: OpKernel(context) { 
-			OP_REQUIRES_OK(context, context->GetAttr("iou_threshold", &iou_threshold_));
+			OP_REQUIRES_OK(context, context->GetAttr("iou_threshold_pos", &iou_threshold_pos));
+			OP_REQUIRES_OK(context, context->GetAttr("iou_threshold_neg", &iou_threshold_neg));
 		}
 
 		void Compute(OpKernelContext* context) override {
-			OP_REQUIRES(context, iou_threshold_ >= 0 && iou_threshold_ <= 1,
-					errors::InvalidArgument("iou_threshold must be in interval [0,1]"));
+			OP_REQUIRES(context, iou_threshold_pos >= 0 && iou_threshold_pos <= 1,
+					errors::InvalidArgument("iou_threshold_pos must be in interval [0,1]"));
+			OP_REQUIRES(context, iou_threshold_neg >= 0 && iou_threshold_neg <= 1,
+					errors::InvalidArgument("iou_threshold_neg must be in interval [0,1]"));
+			OP_REQUIRES(context, iou_threshold_pos >= iou_threshold_neg,
+					errors::InvalidArgument("iou_threshold_pos must be greater than or"
+							" equal to iou_threshold_neg"));
 
 			const Tensor& _boxes = context->input(0);
 			const Tensor& _gt = context->input(1);
@@ -86,31 +103,64 @@ class IouLabelerOp : public OpKernel {
 			Tensor* _out = nullptr;
 			TensorShape out_shape({num_boxes, 5});
 			OP_REQUIRES_OK(context, context->allocate_output(0, out_shape, &_out));
-			
+
 			typename TTypes<float, 2>::Tensor out = _out->tensor<float, 2>();
+
+			/* If a box the highest IoU with a gt out of all the boxes, it gets
+			 * a positive label.  This code is here to keep track of which
+			 * boxes have the highest IoU for a given ground truth.
+			 * The first element of the pair is the box, and the second its IoU
+			 */
+
+			const float POSITIVE = 1;
+			const float NEGATIVE = -1;
+		   	const float NEITHER = 0;
+
+			std::vector< std::pair<int, float> > bestIoU(num_gts);
+			for(int i=0; i < num_gts; ++i) {
+				bestIoU[i] = std::pair<int, float>(0, -1.0);
+			}
 
 			for(int i=0; i < num_boxes; ++i) {
 				float max_IoU = 0.;
-				int argmax_IoU = num_gts;
+				float label = NEITHER;
 				for(int j=0; j < num_gts; ++j) {
 					float IoU = ComputeIOU(boxes, gt, i, j);
-					if (IoU >= iou_threshold_ && IoU >= max_IoU) {
-						max_IoU = IoU;
-						argmax_IoU = j;
+					#ifdef DEBUG_LOOP
+						std::cout << "Box " << i << " and gt " << j;
+						std::cout << " have IoU " << IoU << "\n";
+					#endif
+					if (IoU >= bestIoU[j].second) {
+						// Means this is the best fit for the j'th ground truth so far
+						bestIoU[j].first = i;
+						bestIoU[j].second = IoU;
 					}
-					out(i, 0) = boxes(i, 0);
-					out(i, 1) = boxes(i, 1);
-					out(i, 2) = boxes(i, 2);
-					out(i, 3) = boxes(i, 3);
-					// The output type is unfortunately float, so this will have to do
-					out(i, 4) = static_cast<float>(argmax_IoU);
+					max_IoU = std::max(IoU, max_IoU);
 				}
+
+				if (max_IoU < iou_threshold_neg) {
+			   		label = NEGATIVE;
+				} else if (max_IoU >= iou_threshold_pos) {
+					label = POSITIVE;
+				}
+
+				out(i, 0) = boxes(i, 0);
+				out(i, 1) = boxes(i, 1);
+				out(i, 2) = boxes(i, 2);
+				out(i, 3) = boxes(i, 3);
+				out(i, 4) = label;
 			}
+
+			for(int j=0; j < num_gts; ++j) {
+				out(bestIoU[j].first, 4) = POSITIVE;
+			}
+
 		}
 	private:
-		float iou_threshold_;
+		float iou_threshold_pos;
+		float iou_threshold_neg;
 };
-				
+
 REGISTER_KERNEL_BUILDER(\
 		Name("IouLabeler")\
 		.Device(DEVICE_CPU)\
