@@ -161,13 +161,13 @@ def proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
     """
     final_anchors, final_scores, _, _ = _proposalLayer(feature_stride, iou_threshold,
             pre_nms_keep, post_nms_keep, scores, bbox_regressions, feature_h, feature_w,
-            image_attr, minimum_dim, device, "proposal_layer")
+            image_attr, minimum_dim, device, "proposal_layer", train_rpn=False)
     return final_anchors, final_scores
 
 
 def _proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
         scores, bbox_regressions, feature_h, feature_w, image_attr,
-        minimum_dim, device, scope_name):
+        minimum_dim, device, scope_name, train_rpn):
     """Implementation of internal logic of proposalLayer, see proposalLayer"""
 
     with easy_scope(name=scope_name), tf.device(device):
@@ -178,9 +178,18 @@ def _proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
 
         regressedAnchors = regressAnchors(shiftedAnchors, bbox_regressions)
 
-        clippedAnchors = clipRegions(regressedAnchors, image_attr)
+        if train_rpn is True:
+            # In this case, we need to not clip anchors to image boundaries, but rather
+            # eliminate any cross image-boundary anchors.
+            clippedAnchors, c_indices = killRegions(regressedAnchors, image_attr)
+            p_anchors, p_schores, p_indices = prunedScoresAndAnchors(
+                clippedAnchors, scores, minimum_dim, image_attr)
+            # Select p_indices from c_indices
+            p_indices = tf.gather(c_indices, p_indices)
+        else:
+            clippedAnchors = clipRegions(regressedAnchors, image_attr)
 
-        p_anchors, p_scores, p_indices = prunedScoresAndAnchors(clippedAnchors,
+            p_anchors, p_scores, p_indices = prunedScoresAndAnchors(clippedAnchors,
                 scores, minimum_dim, image_attr)
 
         top_scores, top_score_indices = tf.nn.top_k(p_scores, k=pre_nms_keep, name="top_scores")
@@ -198,7 +207,7 @@ def _proposalLayer(feature_stride, iou_threshold, pre_nms_keep, post_nms_keep,
                 name="proposal_region_scores")
         final_indices = tf.gather(top_indices, post_nms_indices,
                 name="proposal_region_indices")
-        final_base_anchors = tf.gather(tf.reshape(regressedAnchors, (-1, 4)), final_indices,
+        final_base_anchors = tf.gather(tf.reshape(shiftedAnchors, (-1, 4)), final_indices,
                 axis=0, name="proposal_region_base_anchors")
 
     return final_anchors, final_scores, final_indices, final_base_anchors
@@ -228,7 +237,8 @@ def proposalLayer_train(rpnSoftmaxScores, rpnBboxPred, feature_h, feature_w, ima
         image_attr,
         s.DEF_MIN_PROPOSAL_DIMS,
         "/cpu:0",
-        "proposal_layer_train")
+        "proposal_layer_train",
+        rpn_train=True)
 
 
 def prunedScoresAndAnchors(anchors, scores, minimum_dim, im_attr):
@@ -239,12 +249,13 @@ def prunedScoresAndAnchors(anchors, scores, minimum_dim, im_attr):
             the boxes to be pruned.
         scores -- tf.Tensor of shape (numAnchors, feat_h, feat_w) containing
             objectness scores for each of the boxes.
+        minimum_dim -- Minimum dimensions allowed for an anchor
+        im_attr -- tf.Tensor of form [img_h, img_w, scaling_ratio] containg information
+            on the image.
     Output:
         We output tensors of shape (?,2) for scores_gathered and (?,4) for
         anchors_gathered.  The indices of the chosen scores is also returned.
     """
-    anchors = tf.transpose(anchors, (1, 2, 0, 3))
-    scores = tf.transpose(scores, (1, 2, 0))
     anchors = tf.reshape(anchors, (-1, 4))
     scores = tf.reshape(scores, (-1,))
 
@@ -267,6 +278,39 @@ def prunedScoresAndAnchors(anchors, scores, minimum_dim, im_attr):
     anchors_gathered = tf.gather_nd(anchors, indices, name="pruned_anchors")
     scores_gathered = tf.gather_nd(scores, indices, name="pruned_scores")
     return anchors_gathered, scores_gathered, indices
+
+
+def killRegions(anchors, image_attr, axis=-1):
+    """ Prune the anchors so that only those entirely within the image remain
+
+    This function is the RPN-training analog of clipRegions, just more murderous
+
+    Output:
+        The anchors that survive the slaughter, along with their indices
+    """
+
+    with tf.device("/cpu:0"):
+        # Assumes input of shape (numBaseAnchors, feature_h, feature_w, 4)
+        # Or, was previously as above but then got flattened to (-1,4)
+
+        anchors = tf.reshape(anchors, [-1, 4], name="flattened_anchors")
+        x1, y1, x2, y2 = tf.unstack(anchors, num=4, axis=axis)
+
+        zero = tf.constant([0.])
+
+        max_x = [tf.subtract(image_attr[1] * image_attr[2], tf.constant([1.]),
+            name="murder_img_w")]
+        max_y = [tf.subtract(image_attr[0] * image_attr[2], tf.constant([1.]),
+            name="murder_img_h")]
+
+        x1_valid = x1 >= zero
+        x2_valid = x2 <= max_x
+        y1_valid = y1 >= zero
+        y2_valid = y2 <= max_y
+
+        anchor_valid = x1_valid and x2_valid and y1_valid and y2_valid
+        valid_indices = tf.where(anchor_valid, name="surviving_indices")
+    return tf.gather_nd(anchors, valid_indices, name="surviving_anchors"), valid_indices
 
 
 def clipRegions(anchors, image_attr, axis=-1):
