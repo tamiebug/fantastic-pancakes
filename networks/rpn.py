@@ -520,7 +520,7 @@ def scaleUpAnchors(anchors, scales):
 
 def toWidthHeight(anchor):
     """Transforms an anchor in [x0,y0,x1,y1] format to [w,h,x,y]
-    Where [w,h,x,y] stans for width, height, center x coord, center y coordinate
+    Where [w,h,x,y] stands for width, height, center x coord, center y coordinate
     """
     # Since in an anchor [x0,y0,x1,y1] we are represesnting not corner coordinates but
     # coordinates of pixels that compose the corner, actual widths go across the pixels
