@@ -112,9 +112,8 @@ class IouLabelerOp : public OpKernel {
 			 * The first element of the pair is the box, and the second its IoU
 			 */
 
-			const float POSITIVE = 1;
-			const float NEGATIVE = -1;
-		   	const float NEITHER = 0;
+			const int NEGATIVE = 0;
+		   	const int NEITHER = -1;
 
 			std::vector< std::pair<int, float> > bestIoU(num_gts);
 			for(int i=0; i < num_gts; ++i) {
@@ -123,8 +122,12 @@ class IouLabelerOp : public OpKernel {
 
 			for(int i=0; i < num_boxes; ++i) {
 				float max_IoU = 0.;
-				float label = NEITHER;
-				for(int j=0; j < num_gts; ++j) {
+				int label = NEITHER;
+				/* We start upcoming loop through ground truths at j=1 instead of j=0
+				 * since the 0th slot is saved for the background class, which isn't
+				 * an actual class
+				 */
+				for(int j=1; j < num_gts; ++j) {
 					float IoU = ComputeIOU(boxes, gt, i, j);
 					#ifdef DEBUG_LOOP
 						std::cout << "Box " << i << " and gt " << j;
@@ -135,24 +138,35 @@ class IouLabelerOp : public OpKernel {
 						bestIoU[j].first = i;
 						bestIoU[j].second = IoU;
 					}
-					max_IoU = std::max(IoU, max_IoU);
+					if (IoU >= max_IoU) {
+						// Best fit for the ith box so far
+						label = j;
+						max_IoU = IoU;
+					}
 				}
 
 				if (max_IoU < iou_threshold_neg) {
 			   		label = NEGATIVE;
-				} else if (max_IoU >= iou_threshold_pos) {
-					label = POSITIVE;
+				} else if (max_IoU < iou_threshold_pos) {
+					label = NEITHER;
 				}
+
 
 				out(i, 0) = boxes(i, 0);
 				out(i, 1) = boxes(i, 1);
 				out(i, 2) = boxes(i, 2);
 				out(i, 3) = boxes(i, 3);
-				out(i, 4) = label;
+				out(i, 4) = static_cast<float>(label);
 			}
 
+			/* If a box has not yet been assigned to a ground truth, then if it happens
+			 * to have the best IoU with some ground truth out of all the boxes, assign
+			 * that box to that ground truth
+			 */
 			for(int j=0; j < num_gts; ++j) {
-				out(bestIoU[j].first, 4) = POSITIVE;
+				if (out(bestIoU[j].first, 4) < 1) {
+					out(bestIoU[j].first, 4) = static_cast<float>(j);
+				}
 			}
 
 		}

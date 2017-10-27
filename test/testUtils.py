@@ -74,4 +74,4 @@ def array_equality_assert(self, nparray, ref_nparray, tolerance=.01):
     greatest_diff = np.amax(np.absolute(ref_nparray - nparray))
     self.assertLessEqual(greatest_diff, tolerance,
         msg="Greatest difference was %f" % greatest_diff)
-    return greatest_diff <= toleranc
+    return greatest_diff <= tolerance
