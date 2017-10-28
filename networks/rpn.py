@@ -227,9 +227,9 @@ def proposalLayer_train(rpnSoftmaxScores, rpnBboxPred, feature_h, feature_w, ima
     """
     return _proposalLayer(
         s.DEF_FEATURE_STRIDE,
-        s.DEF_IOU_THRESHOLD_TRAIN,
-        s.PRE_NMS_KEEP_TRAIN,
-        s.POST_NMS_KEEP_TRAIN,
+        s.DEF_IOU_THRESHOLD_TRAIN_POS,
+        s.DEF_PRE_NMS_KEEP_TRAIN,
+        s.DEF_POST_NMS_KEEP_TRAIN,
         rpnSoftmaxScores,
         rpnBboxPred,
         feature_h,
@@ -238,7 +238,7 @@ def proposalLayer_train(rpnSoftmaxScores, rpnBboxPred, feature_h, feature_w, ima
         s.DEF_MIN_PROPOSAL_DIMS,
         "/cpu:0",
         "proposal_layer_train",
-        rpn_train=True)
+        train_rpn=True)
 
 
 def prunedScoresAndAnchors(anchors, scores, minimum_dim, im_attr):
@@ -565,11 +565,12 @@ def sampleBoxes(labeled_boxes, num_classes, mini_batch_size):
         Two lists of indices, one positives and the other negatives, randomly sampled
         from labeled_boxes
     """
-
     # Positives are .1, negatives -1., and neither 0.  To avoid floating point rounding
     # issues, I'm using comparison with .5 and -.5 instead of equality to 1. and -1.
+
     positive_box_indices = np.where(labeled_boxes[:, 4] > .5)[0]
-    negative_box_indices = np.where(labeled_boxes[:, 4] < -.5)[0]
+    negative_box_indices = np.where(
+        np.logical_and(labeled_boxes[:, 4] < .5, labeled_boxes[:, 4] > -.5))[0]
 
     num_pos = len(positive_box_indices)
     num_neg = len(negative_box_indices)
@@ -583,7 +584,7 @@ def sampleBoxes(labeled_boxes, num_classes, mini_batch_size):
     pos_Idx = np.random.choice(positive_box_indices, pos_to_choose, replace=False)
     neg_Idx = np.random.choice(negative_box_indices, neg_to_choose, replace=False)
 
-    return pos_Idx, neg_Idx
+    return pos_Idx.astype(np.int32), neg_Idx.astype(np.int32)
 
 
 def calculateRpnLoss(rpnRawScores, rpnBboxPred, feature_h, feature_w, image_attr, gt_boxes):
@@ -605,10 +606,6 @@ def calculateRpnLoss(rpnRawScores, rpnBboxPred, feature_h, feature_w, image_attr
     Output:
         The loss for this minibatch
     """
-
-    iou_threshold_pos = s.DEF_IOU_THRESHOLD_TRAIN_POS
-    iou_threshold_neg = s.DEF_IOU_THRESHOLD_TRAIN_NEG
-    num_classes = 2
     mini_batch_size = 128
 
     with easy_scope(name="proposal_layer_test"), tf.device("/cpu:0"):
@@ -625,12 +622,25 @@ def calculateRpnLoss(rpnRawScores, rpnBboxPred, feature_h, feature_w, image_attr
         predRegressions = tf.gather(tf.reshape(rpnBboxPred, (-1, 4)),
             predIndices, axis=0, name="final_raw_regressions")
 
+    return _calculateRpnLoss(predRawScores, predBoxes, predRegressions,
+            predAnchors, mini_batch_size, gt_boxes, feature_h, feature_w)
+
+
+def _calculateRpnLoss(predRawScores, predBoxes, predRegressions,
+        predAnchors, mini_batch_size, gt_boxes, feature_h, feature_w):
+    """Refactoring of code from calculateRpnLoss into another function for testing"""
+    num_classes = tf.shape_n(gt_boxes)[0] - 1  # subtract one since background is not a class
+    iou_threshold_neg = s.DEF_IOU_THRESHOLD_TRAIN_NEG
+    iou_threshold_pos = s.DEF_IOU_THRESHOLD_TRAIN_POS
+    with easy_scope(name="proposal_layer_test"), tf.device("/cpu:0"):
         labeled_boxes = iou_labeler(predBoxes, gt_boxes, iou_threshold_neg, iou_threshold_pos)
 
         # Sample boxes and raw scores for loss
-        posIdx, negIdx = tf.py_func(lambda x: sampleBoxes(x, num_classes, mini_batch_size),
-            labeled_boxes, [tf.float32, tf.float32])
 
+        posIdx, negIdx = tf.py_func(lambda x: sampleBoxes(x, num_classes, mini_batch_size),
+            [labeled_boxes], [tf.int32, tf.int32], stateful=False, name="sampleBoxes")
+        # posIdx, negIdx = tf.py_func(sampleBoxes, [labeled_boxes, num_classes, mini_batch_size],
+        #        tf.float32, stateful=False, name="sampleBoxes")
         positive_raw_scores = tf.gather(predRawScores, posIdx, axis=0,
                 name="positive_raw_scores")
         negative_raw_scores = tf.gather(predRawScores, negIdx, axis=0,
@@ -640,7 +650,9 @@ def calculateRpnLoss(rpnRawScores, rpnBboxPred, feature_h, feature_w, image_attr
         # to find the gt regression from anchor to gt boxes
         positive_anchors = tf.gather(predAnchors, posIdx, axis=0,
                 name="positive_anchors")
-        positive_gt_boxes = tf.gather(gt_boxes, labeled_boxes[:, 4], name="positive_gt_boxes")
+        positive_gt_boxes = tf.gather(gt_boxes,
+            tf.cast(tf.gather(labeled_boxes[:, 4], posIdx), dtype=tf.int32),
+            name="positive_gt_boxes")
         positive_gt_regs = calculateRegressions(positive_anchors, positive_gt_boxes, axis=-1)
         positive_raw_regressions = tf.gather(predRegressions, posIdx, axis=0,
                 name="positive_raw_regressions")
@@ -648,25 +660,26 @@ def calculateRpnLoss(rpnRawScores, rpnBboxPred, feature_h, feature_w, image_attr
         # Flatten regressions before passing into the huber loss function
         flat_pred_regs = tf.reshape(positive_raw_regressions, [-1])
         flat_gt_regs = tf.reshape(positive_gt_regs, [-1])
-        reg_loss = tf.losses.huber_loss(flat_pred_regs, flat_gt_regs, delta=1.0,
-                name="huber_loss")
+        reg_loss = tf.losses.huber_loss(flat_pred_regs, flat_gt_regs,
+                reduction=tf.losses.Reduction.NONE, delta=1.0)
+        reg_loss = tf.reduce_sum(reg_loss)
 
         # Class-agnostic log loss for positive examples
         # Need to create a whole bunch of [0,1]s of the right length
-        num_pos = tf.shape_n(positive_raw_scores)[0]
-        gt_onehot = tf.one_hot(tf.ones(num_pos, dtype=tf.int32), 2, name="gt_onehot_pos")
-        cls_loss_pos = tf.losses.softmax_cross_entropy(gt_onehot, positive_raw_scores,
-                name="cls_loss_pos")
+        num_pos = tf.shape(positive_raw_scores)[0]
+        cls_loss_pos = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            labels=tf.ones([num_pos], dtype=tf.int32), logits=positive_raw_scores)
+        cls_loss_pos = tf.reduce_sum(cls_loss_pos)
 
         # Log-loss for the negative examples
-        num_neg = tf.shape_n(negative_raw_scores)[0]
-        gt_onehot = tf.one_hot(tf.zeros(num_pos, dtype=tf.int32), 2, name="gt_onehot_neg")
-        cls_loss_neg = tf.losses.softmax_cross_entropy(gt_onehot, negative_raw_scores,
-                name="cls_loss_neg")
+        num_neg = tf.shape(negative_raw_scores)[0]
+        cls_loss_neg = tf.nn.sparse_softmax_cross_entropy_with_logits(
+            labels=tf.zeros([num_neg], dtype=tf.int32), logits=negative_raw_scores)
+        cls_loss_neg = tf.reduce_sum(cls_loss_neg)
 
         # Adding up and normalizing the losses.
-        reg_loss /= num_pos
-        cls_loss = (cls_loss_pos / num_pos) + (cls_loss_neg / num_neg)
+        reg_loss /= (feature_h * feature_w) / 10.
+        cls_loss = (cls_loss_pos + cls_loss_neg) / mini_batch_size
 
         total_loss = tf.add(reg_loss, cls_loss, name="total_loss")
         return total_loss

@@ -209,5 +209,42 @@ class sampleBoxesTest(unittest.TestCase):
                 msg="Duplicates found.  List of indices, positive first is {}".format(all_Idx))
 
 
+class rpnTrainTest(tf.test.TestCase):
+    def test_rpn_train(self):
+        ground_truths = [[0., 0., 0., 0., ], [14., 419., 134., 499.], [316., 190., 605., 524.],
+            [456., 252., 574., 433.]]
+        raw_anchors = [[300., 175., 575., 475.], [400., 200., 650., 425.],
+            [425., 375., 550., 450.], [425., 275., 700., 450.], [150., 475., 225., 525.],
+            [50., 25., 200., 250.], [475., 250., 575., 450.], [800., 150., 850., 200.],
+            [150., 150., 200., 200.]]
+        regd_anchors = [[298., 181., 563., 522.], [400., 200., 650., 425.],
+            [425., 375., 550., 450.], [348., 249., 643., 463.], [122., 459., 246., 552],
+            [23., 22., 201., 254], [475., 250., 575., 450], [800., 150., 850., 200.],
+            [150., 150., 200., 200.]]
+        actual_regressions = [
+            [-0.025362318, 0.0880398671, -0.0369045569, 0.1277004723],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [-0.242753623, -0.0369318181, 0.0699585886, 0.2001540330],
+            [-0.046052631, 0.1078431372, 0.4975803970, 0.6114691495],
+            [-0.0860927152, 0.0022123893, 0.1701059690, 0.0305034542],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0]
+        ]
+        raw_scores = [[.4, .3], [.2, .8], [.5, .5], [.1, .9], [.3, .5], [.5, .5], [.8, .2],
+            [1.0, .0], [1.0, .0]]
+        feature_h = 10
+        feature_w = 10
+        expected_total_loss = 0.17518184521658012
+
+        with self.test_session() as sess:
+            loss = rpn._calculateRpnLoss(raw_scores, regd_anchors, actual_regressions,
+                    raw_anchors, 128, ground_truths, feature_h, feature_w)
+            sess.run(tf.global_variables_initializer())
+            result = sess.run(loss)
+        self.assertAlmostEqual(result, expected_total_loss)
+
+
 if __name__ == "__main__":
     unittest.main()

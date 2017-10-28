@@ -117,7 +117,7 @@ class IouLabelerOp : public OpKernel {
 
 			std::vector< std::pair<int, float> > bestIoU(num_gts);
 			for(int i=0; i < num_gts; ++i) {
-				bestIoU[i] = std::pair<int, float>(0, -1.0);
+				bestIoU[i] = std::pair<int, float>(-1, 0.0);
 			}
 
 			for(int i=0; i < num_boxes; ++i) {
@@ -133,7 +133,7 @@ class IouLabelerOp : public OpKernel {
 						std::cout << "Box " << i << " and gt " << j;
 						std::cout << " have IoU " << IoU << "\n";
 					#endif
-					if (IoU >= bestIoU[j].second) {
+					if (IoU > bestIoU[j].second) {
 						// Means this is the best fit for the j'th ground truth so far
 						bestIoU[j].first = i;
 						bestIoU[j].second = IoU;
@@ -164,7 +164,7 @@ class IouLabelerOp : public OpKernel {
 			 * that box to that ground truth
 			 */
 			for(int j=0; j < num_gts; ++j) {
-				if (out(bestIoU[j].first, 4) < 1) {
+				if (bestIoU[j].first >= 0 && out(bestIoU[j].first, 4) < 1) {
 					out(bestIoU[j].first, 4) = static_cast<float>(j);
 				}
 			}
