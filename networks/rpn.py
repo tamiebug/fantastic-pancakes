@@ -372,7 +372,7 @@ def generateShiftedAnchors(anchors, feature_h, feature_w, feature_stride):
     less_raw_anchor_shifts = feature_stride * raw_anchor_shifts
 
     # Add extra dimensions to anchors for proper broadcasting
-    expanded_anchors = tf.expand_dims(tf.expand_dims(tf.constant(anchors), axis=1), axis=1) - [1.]
+    expanded_anchors = tf.expand_dims(tf.expand_dims(tf.constant(anchors), axis=1), axis=1)  # - [1.]
     return tf.add(less_raw_anchor_shifts, expanded_anchors, name="shifted_anchors")
 
 
@@ -565,7 +565,7 @@ def sampleBoxes(labeled_boxes, num_classes, mini_batch_size):
         Two lists of indices, one positives and the other negatives, randomly sampled
         from labeled_boxes
     """
-    # Positives are .1, negatives -1., and neither 0.  To avoid floating point rounding
+    # Positives are >1, negatives 0, and neither -1.  To avoid floating point rounding
     # issues, I'm using comparison with .5 and -.5 instead of equality to 1. and -1.
 
     positive_box_indices = np.where(labeled_boxes[:, 4] > .5)[0]

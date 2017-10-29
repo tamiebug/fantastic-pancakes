@@ -59,8 +59,6 @@ class ClsTest(unittest.TestCase):
                 rois_placeholder = tf.placeholder("float", [None, 4])
                 info = tf.placeholder("float", [3])
 
-                # 33.301205 is the diff you get if everything is zeroes.
-
                 pool_layer = roi_pooling_layer(feats,  # Need to squeeze out batch number
                                     info,
                                     rois_placeholder,
@@ -72,7 +70,7 @@ class ClsTest(unittest.TestCase):
                     feats: np.squeeze(features),
                     rois_placeholder: rois[:, [1, 2, 3, 4]],
                     info: im_info
-                })[0]
+                })
 
         result = utils.isolatedFunctionRun(runGraph, False, self, im_info)
         return array_equality_assert(self, result, self.reference_activations['pool5'])
