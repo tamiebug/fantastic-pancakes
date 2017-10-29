@@ -142,6 +142,7 @@ class RpnTest(tf.test.TestCase):
         return self.assertAllClose(result, shifted_ref_rois)
         """
 
+
 class calculateRegressionsTest(tf.test.TestCase):
     """Tests the calculateRegressions function"""
 
