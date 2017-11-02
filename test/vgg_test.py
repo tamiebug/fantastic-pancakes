@@ -1,5 +1,4 @@
 import numpy as np
-import caffe
 import tensorflow as tf
 
 from util import frcnn_forward
@@ -20,6 +19,7 @@ class ModelOutputGenerator(metaclass=utils.Singleton):
     """
 
     def __init__(self):
+        import caffe
         # Layer activations that we are going to test
         self.testLayers = ['relu1_1', 'relu2_1', 'relu3_4',
                            'relu4_4', 'pool5', 'relu6', 'relu7', 'prob']
@@ -38,8 +38,7 @@ class ModelOutputGenerator(metaclass=utils.Singleton):
                     # Issue #1727 in the tensorflow/tensorflow git repository
                     # Letting it just use CPU for this forward run instead
 
-                    img = tf.placeholder(
-                        "float", [1, 224, 224, 3], name="images")
+                    img = tf.placeholder(tf.float32, shape=[1, 224, 224, 3], name="images")
                     model = vgg.VGG()
                     model.buildGraph(img, network_version="VGG19")
 
@@ -164,7 +163,7 @@ class Vgg19SavingTest(unittest.TestCase):
     def testSave(self):
         # Layers to be tested
         testLayers = ['conv1_1', 'conv2_1', 'conv3_4', 'conv4_4', 'fc6', 'fc7']
-        img = tf.placeholder("float", [1, 224, 224, 3], name="images")
+        img = tf.placeholder(tf.float32, [1, 224, 224, 3], name="images")
         model = vgg.VGG("vgg19")
         model.buildGraph(img, network_version="VGG19")
 
@@ -210,7 +209,7 @@ class Vgg19SavingTest(unittest.TestCase):
                 os.remove("models/" + biasFn + ".npz")
 
 
-class Vgg16Test(unittest.TestCase):
+class Vgg16Test(tf.test.TestCase):
     """
     Loads the modified vgg16 base model, which is lacking the final fully-connected layers, ending
     on relu5_3.  It will be tested on the image 000456.png in the images subfolder of test,
@@ -225,13 +224,12 @@ class Vgg16Test(unittest.TestCase):
     def test_relu4_1(self):
         """ Tests whether the activations for relu4_1 match a given reference activation. """
         im_data, _ = frcnn_forward.process_image(
-            os.path.join(self.base_dir, "images/000456.png"))
+            os.path.join(self.base_dir, "images/000456.jpg"))
         im_data = np.expand_dims(im_data, axis=0)
 
         def runGraph(self, im):
-            with tf.Session() as sess, tf.device("/gpu:0"):
-                img = tf.placeholder(
-                    "float", im_data.shape, name="images")
+            with self.test_session() as sess, tf.device("/gpu:0"):
+                img = tf.placeholder(tf.float32, im_data.shape, name="images")
                 net = vgg.VGG("vgg16test_1")
                 net.buildGraph(img, train=False,
                     weightsPath=s.DEF_FRCNN_WEIGHTS_PATH,
@@ -244,10 +242,10 @@ class Vgg16Test(unittest.TestCase):
                 sess.close()
                 # Does output come in list form if only one output is produced? [probably]
                 # Blob name is conv4_1, not relu4_1; relu is done in-place by caffe
-                return array_equality_assert(self, np.expand_dims(output, 0),
-                    self.reference_activations['conv4_1'])
+                return output
 
-        return self.assertTrue(utils.isolatedFunctionRun(runGraph, False, self=self, im=im_data))
+        output = utils.isolatedFunctionRun(runGraph, False, self=self, im=im_data)
+        return self.assertAllClose(output, self.reference_activations['conv4_1'])
 
     def test_relu5_3(self):
         """
@@ -260,16 +258,14 @@ class Vgg16Test(unittest.TestCase):
         """
 
         def runGraph(self):
-            config = tf.ConfigProto()
-            # config.log_device_placement = True
-            with tf.Session(config=config) as sess, tf.device("/gpu:0"):
+            with self.test_session() as sess, tf.device("/gpu:0"):
                 try:
                     conv4_1_in = self.reference_activations['conv4_1']
                 except KeyError:
                     print("Warning:  conv4_1 not found in reference_activations.  Something \
                             wrong with .npz file")
                 net = vgg.VGG(namespace="vgg16test_2")
-                net.buildGraph(tf.placeholder(), train=False,
+                net.buildGraph(tf.placeholder(dtype=tf.float32), train=False,
                     weightsPath=s.DEF_FRCNN_WEIGHTS_PATH,
                     biasesPath=s.DEF_FRCNN_BIASES_PATH,
                     network_version="VGG16CONV"
@@ -278,21 +274,20 @@ class Vgg16Test(unittest.TestCase):
                 sess.run(tf.global_variables_initializer())
                 output = sess.run(net.layers['relu5_3'], feed_dict={conv4_1: conv4_1_in})
                 sess.close()
-                return array_equality_assert(self, np.expand_dims(output, 0),
-                        self.reference_activations['conv5_3'])
+                return output
 
-        return self.assertTrue(utils.isolatedFunctionRun(runGraph, False, self=self))
+        output = utils.isolatedFunctionRun(runGraph, False, self=self)
+        return self.assertAllClose(output, self.reference_activations['conv5_3'])
 
     def test_whole_network(self):
         """ Tests whether the activations for relu5_3 match a given reference activation"""
         im_data, _ = frcnn_forward.process_image(
-            os.path.join(self.base_dir, "images/000456.png"))
+            os.path.join(self.base_dir, "images/000456.jpg"))
         im_data = np.expand_dims(im_data, axis=0)
 
         def runGraph(self, im):
-            with tf.Session() as sess, tf.device("/gpu:0"):
-                img = tf.placeholder(
-                    "float", im_data.shape, name="images")
+            with self.test_session() as sess, tf.device("/gpu:0"):
+                img = tf.placeholder(tf.float32, im_data.shape, name="images")
                 net = vgg.VGG("vgg16test_3")
                 # These are the layers of VGG19 we don't use when making a VGG16 network
                 net.buildGraph(img, train=False,
@@ -306,10 +301,10 @@ class Vgg16Test(unittest.TestCase):
                 sess.close()
                 # Does output come in list form if only one output is produced? [probably]
                 # Blob name is conv4_1, not relu4_1; relu is done in-place by caffe
-                return array_equality_assert(self, np.expand_dims(output, 0),
-                    self.reference_activations['conv5_3'])
+                return output
 
-        return self.assertTrue(utils.isolatedFunctionRun(runGraph, False, self=self, im=im_data))
+        output = utils.isolatedFunctionRun(runGraph, False, self=self, im=im_data)
+        return self.assertAllClose(output, self.reference_activations['conv5_3'])
 
 
 if __name__ == '__main__':
