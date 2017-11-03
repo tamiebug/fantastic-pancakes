@@ -177,8 +177,7 @@ class calculateRegressionsTest(tf.test.TestCase):
 class sampleBoxesTest(unittest.TestCase):
     """Tests the sampleBoxes function"""
 
-    def __init__(self, *args, **kwargs):
-        super(sampleBoxesTest, self).__init__(*args, **kwargs)
+    def setUp(self):
         self.labeled_boxes = np.array(
             [[0, 1, 0, 1, 0],
              [4, 8, 16, 32, 1],
