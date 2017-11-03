@@ -14,7 +14,7 @@ class singleRegionOutputTest(tf.test.TestCase):
     def single_gt_template(self, threshold_neg, threshold_pos, expectation):
         """Test to see if iou_labeler works properly in the binary case"""
         regions = tf.constant([[0, 0, 1, 1], [4, 6, 9, 9], [5, 5, 7, 7]], dtype=tf.float32)
-        ground_truth_box = tf.constant([[0,0,0,0], [3, 5, 7, 7]], dtype=tf.float32)
+        ground_truth_box = tf.constant([[0, 0, 0, 0], [3, 5, 7, 7]], dtype=tf.float32)
         op = iou_labeler(regions, ground_truth_box, threshold_neg, threshold_pos)
         result = eval_cpu(op, self)
         self.assertAllClose(result, expectation)
@@ -43,7 +43,7 @@ class singleRegionOutputTest(tf.test.TestCase):
             [5, 0, 7, 2],
             [3, 5, 7, 6]],
             dtype=tf.float32)
-        gt_boxes = tf.constant([[0,0,0,0], [3, 5, 7, 7],
+        gt_boxes = tf.constant([[0, 0, 0, 0], [3, 5, 7, 7],
             [1, 1, 6, 6], [6, 6, 8, 8]], dtype=tf.float32)
         op = iou_labeler(regions, gt_boxes, threshold_neg, threshold_pos)
         # Only going to look at the classification index this time to save typing

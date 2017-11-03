@@ -372,7 +372,7 @@ def generateShiftedAnchors(anchors, feature_h, feature_w, feature_stride):
     less_raw_anchor_shifts = feature_stride * raw_anchor_shifts
 
     # Add extra dimensions to anchors for proper broadcasting
-    expanded_anchors = tf.expand_dims(tf.expand_dims(tf.constant(anchors), axis=1), axis=1)  # - [1.]
+    expanded_anchors = tf.expand_dims(tf.expand_dims(tf.constant(anchors), axis=1), axis=1)
     return tf.add(less_raw_anchor_shifts, expanded_anchors, name="shifted_anchors")
 
 
