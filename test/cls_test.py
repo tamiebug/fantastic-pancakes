@@ -2,19 +2,19 @@ import tensorflow as tf
 import numpy as np
 
 import os
-import unittest
 
 from util import utils
 import util.settings as s
-from test.testUtils import array_equality_assert
 from util import frcnn_forward
 
 from layers.custom_layers import roi_pooling_layer
 from networks import cls
 from networks import loadNetVars
 
+ARR_TOL = 1e-3
 
-class ClsTest(unittest.TestCase):
+
+class ClsTest(tf.test.TestCase):
     """
     Tests whether the classification part of the network has activations matching a reference.
 
@@ -42,7 +42,7 @@ class ClsTest(unittest.TestCase):
             os.path.join(self.base_dir, "images/000456.jpg"))
 
         def runGraph(self, im_info):
-            with tf.Session() as sess, tf.device("/cpu:0"):
+            with self.test_session() as sess, tf.device("/cpu:0"):
                 # the RoI Pooling code currently is CPU only, GPU version not yet developed.
                 try:
                     features = self.reference_activations['conv5_3']
@@ -73,13 +73,13 @@ class ClsTest(unittest.TestCase):
                 })
 
         result = utils.isolatedFunctionRun(runGraph, False, self, im_info)
-        return array_equality_assert(self, result, self.reference_activations['pool5'])
+        return self.assertNDArrayNear(result, self.reference_activations['pool5'], ARR_TOL)
 
     def test_fc7(self):
         """ Tests the FC layers, by looking at fc7, using the roi pooled input"""
 
         def runGraph(self):
-            with tf.Session() as sess, tf.device("/gpu:0"):
+            with self.test_session() as sess, tf.device("/gpu:0"):
                 try:
                     pool5_in = self.reference_activations['pool5']
                 except KeyError:
@@ -94,13 +94,13 @@ class ClsTest(unittest.TestCase):
                 return sess.run(["rcnn/relu7:0"], feed_dict={pool5: pool5_in})
 
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
-        return array_equality_assert(self, result, self.reference_activations['fc7'])
+        return self.assertNDArrayNear(result, self.reference_activations['fc7'], ARR_TOL)
 
     def test_cls_score(self):
         """ Tests the cls_score layer via comarison to a reference activation"""
 
         def runGraph(self):
-            with tf.Session() as sess, tf.device("/gpu:0"):
+            with self.test_session() as sess, tf.device("/gpu:0"):
                 try:
                     relu7_in = self.reference_activations['fc7']
                 except KeyError:
@@ -114,13 +114,13 @@ class ClsTest(unittest.TestCase):
                 return sess.run(["rcnn/cls_score/out:0"], feed_dict={"rcnn/relu7:0": relu7_in})
 
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
-        return array_equality_assert(self, result, self.reference_activations['cls_score'])
+        return self.assertNDArrayNear(result, self.reference_activations['cls_score'], ARR_TOL)
 
     def test_bbox_pred(self):
         """ Tests the bbox_pred layer via comparison to a reference activation"""
 
         def runGraph(self):
-            with tf.Session() as sess, tf.device("/gpu:0"):
+            with self.test_session() as sess, tf.device("/gpu:0"):
                 try:
                     relu7_in = self.reference_activations['fc7']
                 except KeyError:
@@ -134,4 +134,4 @@ class ClsTest(unittest.TestCase):
                 return sess.run(["rcnn/bbox_pred/out:0"], feed_dict={"rcnn/relu7:0": relu7_in})
 
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
-        return array_equality_assert(self, result, self.reference_activations['bbox_pred'])
+        return self.assertNDArrayNear(result, self.reference_activations['bbox_pred'], ARR_TOL)

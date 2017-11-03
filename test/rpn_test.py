@@ -7,12 +7,13 @@ import tensorflow as tf
 
 from util import utils
 from util import settings as s
-from test.testUtils import array_equality_assert
 from test.testUtils import eval_cpu
 from util import frcnn_forward
 
 from networks import rpn
 from networks import loadNetVars
+
+ARR_TOL = 1e-3
 
 
 class generateAnchorsTest(unittest.TestCase):
@@ -66,7 +67,7 @@ class RpnTest(tf.test.TestCase):
         """
 
         def runGraph(self):
-            with tf.Session() as sess:
+            with self.test_session() as sess:
                 features_activations = self.reference_activations['conv5_3']
                 features = tf.placeholder("float", [1, None, None, 512])
                 info = tf.placeholder("float", [3])
@@ -81,7 +82,7 @@ class RpnTest(tf.test.TestCase):
                     features: features_activations, info: self.im_info})
 
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
-        return array_equality_assert(self, result, self.reference_activations["rpn_cls_score"])
+        return self.assertNDArrayNear(result, self.reference_activations["rpn_cls_score"], ARR_TOL)
 
     def test_rpn_bbox_pred(self):
         """
@@ -92,7 +93,7 @@ class RpnTest(tf.test.TestCase):
         """
 
         def runGraph(self):
-            with tf.Session() as sess:
+            with self.test_session() as sess:
                 features_activations = self.reference_activations['conv5_3']
                 features = tf.placeholder("float", [1, None, None, 512])
                 info = tf.placeholder("float", [3])
@@ -103,7 +104,7 @@ class RpnTest(tf.test.TestCase):
                 return sess.run(["rcnn/rpn_bbox_pred/out:0"],
                         feed_dict={features: features_activations, info: self.im_info})
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
-        return array_equality_assert(self, result, self.reference_activations["rpn_bbox_pred"])
+        return self.assertNDArrayNear(result, self.reference_activations["rpn_bbox_pred"], ARR_TOL)
 
     def test_proposals_layer(self):
         """Tests the proposal layer
