@@ -11,33 +11,42 @@ import random
 import unittest
 
 
-class Vgg19SavingTest(unittest.TestCase):
+REL_TOL = 1e-3
+ABS_TOL = 1e-3
+
+class Vgg16SavingTest(tf.test.TestCase):
     """
-    Loads the vgg19 base model, saves it, then reloads it once more in order to test that the
+    Loads the vgg16 base model, saves it, then reloads it once more in order to test that the
     weights and biases are being properly saved and loaded
     """
 
     def testSave(self):
         # Layers to be tested
-        testLayers = ['conv1_1', 'conv2_1', 'conv3_4', 'conv4_4', 'fc6', 'fc7']
+        testLayers = ['conv1_1', 'conv2_1', 'conv3_3', 'conv4_3', 'fc6', 'fc7']
+
         img = tf.placeholder(tf.float32, [1, 224, 224, 3], name="images")
-        model = vgg.VGG("vgg19")
-        model.buildGraph(img, network_version="VGG19")
+        model = vgg.VGG("frcnn")
+        model.buildGraph(img, network_version="VGG16",
+            weightsPath=s.DEF_FRCNN_WEIGHTS_PATH,
+            biasesPath=s.DEF_FRCNN_BIASES_PATH)
 
         testLayerVariables = []
 
         for layer in testLayers:
-            testLayerVariables.append("vgg19/" + layer + "/Weights:0")
-            testLayerVariables.append("vgg19/" + layer + "/Bias:0")
+            testLayerVariables.append("frcnn/" + layer + "/Weights:0")
+            testLayerVariables.append("frcnn/" + layer + "/Bias:0")
+
 
         # Find the weights and biases for several layers in a model
+        weightsFn = None
+        biasFn = None
         try:
-            with tf.Session() as sess:
+            with self.test_session() as sess:
                 sess.run(tf.global_variables_initializer())
                 output = sess.run(testLayerVariables)
                 randNum = None
-                # Save the weights/biases in a file
                 while True:
+                    # Try different file names until you find one that isn't taken
                     randNum = random.random()
                     weightsFn = str(randNum) + "testWeights"
                     biasFn = str(randNum) + "testBias"
@@ -48,9 +57,10 @@ class Vgg19SavingTest(unittest.TestCase):
                         break
             # Load the weights/biases into a new model
             model2 = vgg.VGG()
-            model2.buildGraph(img, train=False, weightsPath="models/" +
-                              weightsFn + ".npz", biasesPath="models/" + biasFn + ".npz")
-            with tf.Session() as sess:
+            model2.buildGraph(img, train=False,
+                weightsPath="models/" + weightsFn + ".npz",
+                biasesPath="models/" + biasFn + ".npz")
+            with self.test_session() as sess:
                 sess.run(tf.global_variables_initializer())
                 output2 = sess.run(testLayerVariables)
             self.assertEqual(len(output2), 2 * len(testLayers),
@@ -60,9 +70,9 @@ class Vgg19SavingTest(unittest.TestCase):
                 np.testing.assert_equal(
                     output[i], output2[i], err_msg="Output number %i was not equal" % i)
         finally:
-            if os.path.isfile("models/" + weightsFn + ".npz"):
+            if weightsFn is not None and os.path.isfile("models/" + weightsFn + ".npz"):
                 os.remove("models/" + weightsFn + ".npz")
-            if os.path.isfile("models/" + biasFn + ".npz"):
+            if biasFn is not None and os.path.isfile("models/" + biasFn + ".npz"):
                 os.remove("models/" + biasFn + ".npz")
 
 
@@ -102,7 +112,7 @@ class Vgg16Test(tf.test.TestCase):
                 return output
 
         output = utils.isolatedFunctionRun(runGraph, False, self=self, im=im_data)
-        return self.assertAllClose(output, self.reference_activations['conv4_1'])
+        return self.assertAllClose(output, self.reference_activations['conv4_1'], REL_TOL, ABS_TOL)
 
     def test_relu5_3(self):
         """
@@ -134,7 +144,7 @@ class Vgg16Test(tf.test.TestCase):
                 return output
 
         output = utils.isolatedFunctionRun(runGraph, False, self=self)
-        return self.assertAllClose(output, self.reference_activations['conv5_3'])
+        return self.assertAllClose(output, self.reference_activations['conv5_3'], REL_TOL, ABS_TOL)
 
     def test_whole_network(self):
         """ Tests whether the activations for relu5_3 match a given reference activation"""
@@ -146,7 +156,7 @@ class Vgg16Test(tf.test.TestCase):
             with self.test_session() as sess, tf.device("/gpu:0"):
                 img = tf.placeholder(tf.float32, im_data.shape, name="images")
                 net = vgg.VGG("vgg16test_3")
-                # These are the layers of VGG19 we don't use when making a VGG16 network
+                # These are the layers of VGG16 we don't use when making a VGG16 network
                 net.buildGraph(img, train=False,
                     weightsPath=s.DEF_FRCNN_WEIGHTS_PATH,
                     biasesPath=s.DEF_FRCNN_BIASES_PATH,
@@ -161,7 +171,7 @@ class Vgg16Test(tf.test.TestCase):
                 return output
 
         output = utils.isolatedFunctionRun(runGraph, False, self=self, im=im_data)
-        return self.assertAllClose(output, self.reference_activations['conv5_3'])
+        return self.assertAllClose(output, self.reference_activations['conv5_3'], REL_TOL, ABS_TOL)
 
 
 if __name__ == '__main__':

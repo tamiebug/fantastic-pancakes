@@ -5,7 +5,7 @@ import collections
 import util.settings as s
 from . import loadNetVars
 from util.utils import easy_scope
-
+from util.utils import eprint
 
 class VGG():
     def __init__(self, namespace="vgg"):
@@ -56,7 +56,7 @@ class VGG():
                     name, trainable=trainable)
             else:
                 self.layers[name] = self.createFcLayer(name, trainable=trainable)
-        elif name.startswth('drop'):
+        elif name.startswith('drop'):
             self.layers[name] = tf.nn.dropout(self.prevLayer,
                     0.5, name=name)
         elif name == "prob":
@@ -247,7 +247,7 @@ class VGG():
                 with tf.device(layer["device"]):
                     self.addLayer(layer["name"], trainable=layer["trainable"])
 
-        print("VGG computational graph successfully actualized!  See layers"
+        eprint("VGG computational graph successfully actualized!  See layers"
             " attribute to inspect its ops.")
 
         return self.prevLayer

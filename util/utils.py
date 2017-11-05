@@ -8,9 +8,14 @@ import tarfile
 from urllib.request import urlretrieve
 import threading
 import os
+import sys
 from functools import partial
 from contextlib import contextmanager
 
+
+def eprint(text):
+    """ Prints text to stderr """
+    print(text, file=sys.stderr)
 
 def genProgressBar(**kwargs):
     """
