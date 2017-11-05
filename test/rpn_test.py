@@ -56,14 +56,14 @@ class RpnTest(tf.test.TestCase):
         self.reference_activations = np.load(os.path.join(
             self.base_dir, "activations/test_values.npz"))
         _, self.im_info = frcnn_forward.process_image(
-            os.path.join(self.base_dir, "images/000456.jpg"))
+            os.path.join(self.base_dir, "images/000456.png"))
 
     def test_rpn_cls_score(self):
         """
         Tests the rpn_cls_score and rpn_conv/3x3 layers.
 
         We feed in conv5_3 activation data from a reference activation gathered from
-        test/images/000456.jpg and compare the output from rpn_cls_score
+        test/images/000456.png and compare the output from rpn_cls_score
         """
 
         def runGraph(self):
@@ -89,7 +89,7 @@ class RpnTest(tf.test.TestCase):
         Tests the rpn_bbox_pred and rpn_conv/3x3 layers.
 
         We feed in conv5_3 activation data from a reference activation gathered from
-        test/images/000456.jpg and compare the output from rpn_bbox_pred
+        test/images/000456.png and compare the output from rpn_bbox_pred
         """
 
         def runGraph(self):

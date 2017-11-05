@@ -34,12 +34,12 @@ class ClsTest(tf.test.TestCase):
         a reference network.
 
         We feed in the rois data, the conv5_3 features data, and the image data (
-        dimensions and scale factor) obtained from the test image in test/images/000456.jpg
+        dimensions and scale factor) obtained from the test image in test/images/000456.png
         and compare it to the expected activation values.
         """
         # We don't need the actual image pixels, just the dimensionality and scale information.
         _, im_info = frcnn_forward.process_image(
-            os.path.join(self.base_dir, "images/000456.jpg"))
+            os.path.join(self.base_dir, "images/000456.png"))
 
         def runGraph(self, im_info):
             with self.test_session() as sess, tf.device("/cpu:0"):

@@ -81,7 +81,7 @@ class Vgg16Test(tf.test.TestCase):
     def test_relu4_1(self):
         """ Tests whether the activations for relu4_1 match a given reference activation. """
         im_data, _ = frcnn_forward.process_image(
-            os.path.join(self.base_dir, "images/000456.jpg"))
+            os.path.join(self.base_dir, "images/000456.png"))
         im_data = np.expand_dims(im_data, axis=0)
 
         def runGraph(self, im):
@@ -139,7 +139,7 @@ class Vgg16Test(tf.test.TestCase):
     def test_whole_network(self):
         """ Tests whether the activations for relu5_3 match a given reference activation"""
         im_data, _ = frcnn_forward.process_image(
-            os.path.join(self.base_dir, "images/000456.jpg"))
+            os.path.join(self.base_dir, "images/000456.png"))
         im_data = np.expand_dims(im_data, axis=0)
 
         def runGraph(self, im):
