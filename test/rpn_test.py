@@ -106,9 +106,6 @@ class RpnTest(tf.test.TestCase):
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
         return self.assertNDArrayNear(result, self.reference_activations["rpn_bbox_pred"], ARR_TOL)
 
-    @unittest.skip("A change to the method in which proposals are generated has temporarily"
-        "put test_proposals_layer  out of order.  Currently looking for workaround / "
-        "alternate test")
     def test_proposals_layer(self):
         """Tests the proposal layer
 
@@ -137,9 +134,7 @@ class RpnTest(tf.test.TestCase):
 
 
         result = utils.isolatedFunctionRun(runGraph, False, self)[0]
-        shifted_ref_rois = self.reference_activations['rois'][:, [1, 2, 3, 4]]# +\
-           # [[1., 1., 0., 0.]]
-        return self.assertAllClose(result, shifted_ref_rois)
+        return self.assertAllClose(result, self.reference_activations['rois'])
 
 
 
