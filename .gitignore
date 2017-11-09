@@ -64,6 +64,9 @@ target/
 # Downlaoded Models
 models/
 
+# Downloaded Data
+data/
+
 # Virtualenv
 tens/
 

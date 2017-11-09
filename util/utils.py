@@ -11,11 +11,15 @@ import os
 import sys
 from functools import partial
 from contextlib import contextmanager
+import json
+import subprocess
+import zipfile
 
 
 def eprint(text):
     """ Prints text to stderr """
     print(text, file=sys.stderr)
+
 
 def genProgressBar(**kwargs):
     """
@@ -309,3 +313,130 @@ def easy_scope(name, *args, **kwargs):
     with tf.variable_scope(name, *args, **kwargs) as scope:
         with tf.name_scope(new_name):
             yield scope
+
+
+def run_with_error_msg(command, errormsg):
+    """ Runs the command, printing errormsg if it fails """
+    try:
+        subprocess.run("source ~/.bashrc;" + command, check=True,
+                shell=True, executable="/bin/bash")
+    except subprocess.CalledProcessError:
+        eprint(errormsg)
+        print("FALSE")
+        return False
+    print("TRUE")
+    return True
+
+
+def make_dir(directory):
+    """ Makes directory if it does not already exist.  Returns true if directory made """
+    if not os.path.isdir(directory):
+        subprocess.run("mkdir " + directory, shell=True)
+        return True
+    return False
+
+
+def prepare_COCO2017(restrict_to_COCO2007=True):
+    """ Download the COCO2017 data set and return a dict of bboxes, None on failure """
+
+    shell_load_train = "gsutil -m rsync gs://images.cocodataset.org/train2017 data/coco2017_train"
+    shell_load_val = "gsutil -m rsync gs://images.cocodataset.org/val2017 data/coco2017_valid"
+    shell_load_trainval_annotations = ("gsutil -m rsync gs://images.cocodataset.org/annotations"
+                                       " data/")
+    """
+    if shutil.which("gsutil") is None:
+        print("gsutil not installed, but necessary for downloading the COCO2017 data set.")
+        inp = input("Install gsutil? y/n")
+        if inp != 'yes' and inp != 'y':
+            print("gsutil not installed.  prepare_COCO2017 aborted")
+
+    run_with_error_msg("curl https://sdk.cloud.google.com | bash",
+                       "gsutil download unsuccessful.  Manually install gsutil")
+
+    """
+    # Necessary so that gsutil becomes available for use
+
+    # Move up to project's home directory.
+    os.chdir(os.path.join(os.path.dirname(os.path.realpath(__file__)), os.pardir))
+    make_dir("data/")
+
+    if make_dir("data/coco2017_valid") or (
+            os.path.exists("data/coco2017_valid") and os.listdir("data/coco2017_valid") == []):
+        print("Downloading COCO2017 validation image set")
+        if not run_with_error_msg(shell_load_val, "COCO2017 validation image set download failed"):
+            return None
+
+    if make_dir("data/coco2017_train") or (
+            os.path.exists("data/coco2017_train") and os.listdir("data/coco2017_train") == []):
+        print("Downloading COCO2017 training image set")
+        if not run_with_error_msg(shell_load_train, "COCO2017 training image set download failed"):
+            return None
+
+    if make_dir("data/coco2017_trainval_annotations") or (
+            os.path.exists("data/coco2017_trainval_annotations") and
+            os.listdir("data/coco2017_trainval_annotations") == []):
+        if not run_with_error_msg(shell_load_trainval_annotations,
+                "COCO2017 trainval annotations download failed"):
+            return None
+        else:
+            with zipfile.ZipFile("data/annotations_trainval2017.zip", "r") as zip_file:
+                zip_file.extractall("data/coco2017_trainval_annotations/")
+
+    annotations_json = None
+
+    print("Loading annotations JSON file...")
+    with open("data/coco2017_trainval_annotations/annotations/instances_train2017.json") as data:
+        annotations_json = json.load(data)
+
+    return process_COCO2017_JSON(restrict_to_COCO2007, annotations_json)
+
+
+def process_COCO2017_JSON(restrict_to_COCO2007, annotations_json):
+    """
+    Process JSON file and produce dictionary with bounding boxes
+
+    Returns dictionary with image numbers as keys, and values being lists of
+    ground truth boxes in the following format: (x, y, w, h, class),
+    where class is any one of the 90 classes present in COCO2017.
+    If restrict_to_COCO2007 is True, then we restrict ourself only to classes
+    belonging to the 20 (non-background) classes in COCO2007.
+    """
+
+    bounding_boxes = {}
+    print("Processing bbox data from annotations file...")
+
+    if restrict_to_COCO2007:
+        # The zero is so that the allowed_classes get offset by one
+        allowed_classes = [0, 5, 2, 16, 9, 44, 6, 3, 17, 62, 21,
+                           67, 18, 19, 4, 1, 64, 20, 63, 7, 72]
+        for annotation in annotations_json['annotations']:
+            image_id = annotation['image_id']
+            if annotation['category_id'] in allowed_classes:
+                if image_id not in bounding_boxes:
+                    # Start a list of bounding boxes for that image_id
+                    bounding_boxes[image_id] = [annotation['bbox'][:]]
+                else:
+                    # Add to the already existing list of bounding boxes for that id
+                    bounding_boxes[image_id].append(annotation['bbox'][:])
+
+                # In either case, we need to append the classification category to the bbox
+                # 4-tuple in order to get the desired format.
+                # We want the classes to be numbered as they appear in allowed_classes to
+                # ensure compatibility with COCO2007's class ordering.
+                bounding_boxes[image_id][-1].append(
+                    allowed_classes.index(annotation['category_id'])
+                )
+
+    else:
+        # Not being restricted to COCO2007
+        for annotation in annotations_json['annotations']:
+            image_id = annotation['image_id']
+            if image_id not in bounding_boxes:
+                bounding_boxes[image_id] = [annotation['bbox'][:]]
+            else:
+                bounding_boxes[image_id].append(annotation['bbox'][:])
+
+            bounding_boxes[image_id][-1].append(annotation['category_id'][:])
+
+    print("Bbox data processing complete!")
+    return bounding_boxes
